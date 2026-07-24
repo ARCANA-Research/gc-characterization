@@ -220,7 +220,7 @@ The final output format is in terms of .xlsx files (Microsoft Excel sheets) save
 
 All claims of the paper can be reproduced by executing all counters specified in `counters/` directory and executing simulation runs. 
 
-## Initial Setup (Kick-the-Tires)
+## Kick-the-Tires Sanity Checks
 
 After installing dependencies and building the tool, change `config.yaml` to execute one benchmark and one GC. We recommend using `fop` and `G1` respectively as this workload has a low execution time. We recommend changing `heap-multiplier` to `5.0` to execute workloads at 5-times of the minimum heap, reducing the execution time even further. 
 
