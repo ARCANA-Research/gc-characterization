@@ -1,0 +1,50 @@
+---
+# Status events and columns
+PROCESS:
+    color: 92
+OK:
+    color: 92
+SAMPLE:
+    color: 92
+CORRECT_HEAP:
+    color: 92
+DACAPO:
+    color: 96
+    events:
+        OUTPUT_FOUND: boolean
+        DACAPO_STARTED: boolean
+        NO_DACAPO_FAILED: boolean
+        DACAPO_PASSED: boolean
+        NO_JAVA_OOM: boolean
+        NO_C2_FAILED: boolean
+CONDOR:
+    color: 93
+    events:
+        CONDOR_FOUND: boolean
+        NO_CONDOR_OOM: boolean
+        NO_CONDOR_ABORTED: boolean
+        NO_CONDOR_EVICTED: boolean
+        CONDOR_STARTED: boolean
+        CONDOR_TERMINATED: boolean
+        EXEC_HOURS: number
+        MEM_GB: number
+        EXEC_PATH: text
+        ROI_HOURS: number
+GEM5:
+    color: 94
+    events:
+        SIMERR_FOUND: boolean
+        NO_RUBY_DEADLOCK: boolean
+        NO_GEM5_ERROR: boolean
+        NO_SEGMENTATION_FAULT: boolean
+        GEM5_STATS_FOUND: boolean
+        GEM5_STATS_FILE_VALID: boolean
+        GEM5_STATS_PHASES_MATCH_SIMULATION: boolean
+        GEM5_STATS_VALID_EVENTS: boolean
+RAMULATOR2:
+    color: 91
+    events:
+        RAMUALTOR2_STATS_FOUND: boolean
+        RAMUALTOR2_STATS_FILE_VALID: boolean
+        RAMUALTOR2_TRACE_FILE_VALID: boolean
+        RAMULATOR2_STATS_PHASES_MATCH_SIMULATION: boolean

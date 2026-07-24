@@ -1,0 +1,56 @@
+---
+includes:
+    - '@CURRDIR/running/base.yaml'
+benchmarks:
+    dacapochopin: '@BENCHMARKS'
+heap_range: 1
+invocations: 1
+minheap_multiplier: '@MINHEAPMULTIPLIER'
+configs:
+    - openjdk-21|c|coops|gc_@GC|eoom|h2o_m|cassandra_m|trades_m|cores|cp|threads|events|library|epath|rpath|cpath #|start_jfr
+modifiers:
+    cores:
+        type: JVMArg
+        val: -XX:ActiveProcessorCount=@JVMCORECOUNT
+    cp:
+        type: JVMClasspath
+        val: '@BUILDPATH'
+    threads:
+        type: JVMArg
+        val: -XX:+DisableThreadName
+    events:
+        type: JVMArg
+        val: -XX:+EnableSimulatorEvents
+    library:
+        type: JVMArg
+        val: -Djava.library.path=@BUILDPATH
+    epath:
+        type: JVMArg
+        val: exec_path=@OUTDIR/@BMNAME/@GC_@BMHEAP
+    rpath:
+        type: JVMArg
+        val: relative_path=@BMNAME/@GC_@BMHEAP
+    cpath:
+        type: JVMArg
+        val: checkpoint_path=@BMNAME.@GC.@BMHEAP.@BMSIZE.@JDKHEAP
+    start_jfr:
+        type: JVMArg
+        val: -XX:StartFlightRecording:settings=@JFRPATH/@GC.jfc,maxsize=0,filename=gc_jfr.jfr
+runtimes:
+    openjdk-21:
+        home: '@JDKPATH'
+        release: '@JDKVERSION'
+        type: OpenJDK
+spread_factor: 1
+suites:
+    dacapochopin:
+        callback: DacapoChopinCallback
+        size: '@SIZE'
+        minheap: openjdk-21-@GC
+        minheap_values:
+            openjdk-21-@GC: '@MINHEAP'
+        path: '@DACAPOPATH'
+        release: '23.11'
+        timeout: 0
+        timing_iteration: '@RUNS'
+        type: DaCapo

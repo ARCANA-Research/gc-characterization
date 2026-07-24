@@ -1,0 +1,57 @@
+---
+modifiers:
+    gc_G1:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC
+    gc_Parallel:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseParallelGC
+    gc_Serial:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseSerialGC
+    gc_Z:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseZGC
+    gc_Shenandoah:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC
+    gc_GenZ:
+        type: JVMArg
+        val: -XX:+UnlockExperimentalVMOptions -XX:+UseZGC -XX:+ZGenerational
+    s:
+        type: JVMArg
+        val: -server
+    c:
+        type: JVMArg
+        val: -client
+    eoom:
+        type: JVMArg
+        val: -XX:+ExitOnOutOfMemoryError
+    coops:
+        type: JVMArg
+        val: -XX:+UseCompressedOops
+    h2o_m:
+        type: JVMArg
+        val: -Dsys.ai.h2o.debug.allowJavaVersions=@JDKVERSION --add-opens java.base/java.lang=ALL-UNNAMED
+        includes:
+            dacapochopin:
+                - h2o
+    cassandra_m:
+        type: JVMArg
+        val: -Djava.security.manager=allow --add-exports java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+        includes:
+            dacapochopin:
+                - cassandra
+    trades_m:
+        type: JVMArg
+        val: --add-opens java.base/java.util=ALL-UNNAMED
+        includes:
+            dacapochopin:
+                - tradebeans
+                - tradesoap
+    # jvm_log:
+    #     type: JVMArg
+    #     val: -XX:+UnlockDiagnosticVMOptions -Xlog:all=info
+    # gc_log:
+    #     type: JVMArg
+    #     val: -Xlog:gc*=info,gc+heap*=trace:

@@ -1,0 +1,25 @@
+---
+gem5:
+    command: '@SIMBINARY'
+    args:
+        - --outdir=@BENCHMARKDIR
+        - --stats-file=@BENCHMARKDIR/stats.gz?desc=False\&spaces=False
+        - --dump-config=@BENCHMARKDIR/config.log
+        - --redirect-stdout
+        - --redirect-stderr
+        - --silent-redirect
+        - --stdout-file=@BENCHMARKDIR/simout.log
+        - --stderr-file=@BENCHMARKDIR/simerr.log
+gem5-config:
+    command: '@SIMCONFIGDIR/gem5/jvm.py'
+    args:
+        - --ramulator_config=@DRAMCONFIG
+        - --ramulator_output=@BENCHMARKDIR/ramulator_stats.gz
+        - --ramulator_trace=@BENCHMARKDIR/ramulator_trace.gz
+        - --config_path=@OUTDIR/config.yaml
+        - --jdk_cmd=@BENCHMARKDIR/scripts/jvm_cmd.log
+        - --gem5_config_dir=@SIMCONFIGDIR/gem5
+        - --benchmark_image_path=@BENCHMARKIMAGE
+        - --ubuntu_image_path=@UBUNTUIMAGE
+        - --kernel_path=@KERNELPATH
+        # - --copy_jfr=gc_jfr.jfr <- enable for when using jfr

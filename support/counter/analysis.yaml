@@ -1,0 +1,212 @@
+---
+# ============================== AGENT COUNTERS ============================== #
+    - type: overhead
+      counters:
+          - TIME
+      title: time-overhead
+    - type: count
+      counters:
+          - TIME
+      title: time
+    - type: count
+      counters:
+          - GC_EVENT_COUNT
+      title: gc-event-count
+    - type: static
+      counter: GC_THREAD_COUNT
+      title: gc-thread-count
+    - type: static
+      counter: GC_THREAD_OVERLAP
+      title: gc-thread-overlap
+    - type: resource_usage
+      counter: GC_CPU_PERCENT
+      title: gc-cpu-percent
+    - type: p99
+      counter: TIME
+      title: time-p99
+    - type: mean
+      counter: TIME
+      title: time-mean
+    - type: heap_usage
+      counter: GC_RECLAIM_RATE
+      title: gc-reclaim
+    - type: heap_usage
+      counter: GC_HEAP_USED_PERCENT_OLD
+      title: gc-old-used
+    - type: heap_usage
+      counter: GC_OBJECT_PROMOTION
+      title: gc-old-promotion
+    - type: gc_frequency
+      counters:
+          time: TIME
+          gc_event_count: GC_EVENT_COUNT
+      title: pause-freq
+# ============================= L1 CACHE COUNTERS ============================ #
+    - type: accuracy
+      counters:
+          hit: MEM_LOAD_RETIRED:L1_HIT
+          miss: MEM_LOAD_RETIRED:L1_MISS
+      title: l1-load-hit-rate
+    - type: overhead
+      counters:
+          - MEM_LOAD_RETIRED:L1_HIT
+          - MEM_LOAD_RETIRED:L1_MISS
+      title: l1-load-overhead
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L1_HIT
+      title: l1-hit
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L1_MISS
+      title: l1-miss
+# ============================= L2 CACHE COUNTERS ============================ #
+    - type: accuracy
+      counters:
+          hit: MEM_LOAD_RETIRED:L2_HIT
+          miss: MEM_LOAD_RETIRED:L2_MISS
+      title: l2-load-hit-rate
+    - type: overhead
+      counters:
+          - MEM_LOAD_RETIRED:L2_HIT
+          - MEM_LOAD_RETIRED:L2_MISS
+      title: l2-load-overhead
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L2_HIT
+      title: l2-hit
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L2_MISS
+      title: l2-miss
+# ============================= L3 CACHE COUNTERS ============================ #
+    - type: accuracy
+      counters:
+          hit: MEM_LOAD_RETIRED:L3_HIT
+          miss: MEM_LOAD_RETIRED:L3_MISS
+      title: l3-load-hit-rate
+    - type: overhead
+      counters:
+          - MEM_LOAD_RETIRED:L3_HIT
+          - MEM_LOAD_RETIRED:L3_MISS
+      title: l3-load-overhead
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L3_HIT
+      title: l3-hit
+    - type: count
+      counters:
+          - MEM_LOAD_RETIRED:L3_MISS
+      title: l3-miss
+# ============================= RAPL COUNTERS ============================ #
+    - type: count
+      counters:
+          - RAPL_ENERGY_DRAM
+      multiplier: 0.00000006104
+      title: rapl-dram
+    - type: count
+      counters:
+          - RAPL_ENERGY_PKG
+      multiplier: 0.00000006104
+      title: rapl-pkg
+    - type: count
+      counters:
+          - RAPL_ENERGY_PKG
+          - RAPL_ENERGY_DRAM
+      multiplier: 0.00000006104
+      title: rapl-total
+    - type: overhead
+      counters:
+          - RAPL_ENERGY_PKG
+          - RAPL_ENERGY_DRAM
+      title: rapl-total-overhead
+    - type: overhead
+      counters:
+          - RAPL_ENERGY_DRAM
+      title: rapl-dram-overhead
+    - type: accuracy
+      counters:
+          hit: RAPL_ENERGY_DRAM
+          miss: RAPL_ENERGY_PKG
+      title: rapl-dram-percent
+# ============================== BRANCH COUNTERS ============================= #
+    - type: accuracy
+      counters:
+          total: BRANCH_INSTRUCTIONS_RETIRED
+          miss: MISPREDICTED_BRANCH_RETIRED
+      title: bp-accuracy
+    - type: overhead
+      counters:
+          - BRANCH_INSTRUCTIONS_RETIRED
+      title: bp-overhead
+# =========================== INSTRUCTION COUNTERS =========================== #
+    - type: division
+      counters:
+          denominator: PERF_COUNT_HW_CPU_CYCLES
+          numerator: PERF_COUNT_HW_INSTRUCTIONS
+      title: ipc
+    - type: overhead
+      counters:
+          - PERF_COUNT_HW_INSTRUCTIONS
+      title: instruction-overhead
+    - type: overhead
+      counters:
+          - PERF_COUNT_HW_CPU_CYCLES
+      title: cycles-overhead
+# ============================== PAGING COUNTERS ============================= #
+    - type: overhead
+      counters:
+          - PERF_COUNT_SW_PAGE_FAULTS_MAJ
+      title: page-fault-overhead
+# ============================= OFFCORE COUNTERS ============================= #
+    - type: division
+      counters:
+          denominator: OFFCORE_REQUESTS:ALL_DATA_RD
+          numerator: OFFCORE_REQUESTS:L3_MISS_DEMAND_DATA_RD
+      title: off-dmd-rd-percent
+    - type: overhead
+      counters:
+          - OFFCORE_REQUESTS:L3_MISS_DEMAND_DATA_RD
+      title: off-dmd-rd-overhead
+    - type: overhead
+      counters:
+          - OFFCORE_REQUESTS:ALL_DATA_RD
+      title: off-read-overhead
+# ============================== CYCLE COUNTERS ============================== #
+    - type: division
+      counters:
+          denominator: CYCLE_ACTIVITY:CYCLES_MEM_ANY
+          numerator: CYCLE_ACTIVITY:STALLS_MEM_ANY
+      title: st-mem-cyc-rate
+    - type: overhead
+      counters:
+          - CYCLE_ACTIVITY:STALLS_MEM_ANY
+      title: st-mem-cyc-oh
+    - type: count
+      counters:
+          - OFFCORE_REQUESTS:L3_MISS_DEMAND_DATA_RD
+      title: off-dmd-read-raw
+    - type: count
+      counters:
+          - OFFCORE_REQUESTS:ALL_DATA_RD
+      title: off-read-raw
+# ========================= L2 USELESS HWPF COUNTERS ========================= #
+    - type: overhead
+      counters:
+          - L2_LINES_OUT:USELESS_HWPF
+      title: l2-us-hwpf-oh
+    - type: count
+      counters:
+          - L2_LINES_OUT:USELESS_HWPF
+      title: l2-useless-hwpf
+# ============================== ICACHE COUNTERS ============================= #
+    - type: accuracy
+      counters:
+          hit: ICACHE_64B:IFTAG_HIT
+          miss: ICACHE_64B:IFTAG_MISS
+      title: icache-hit-rate
+    - type: overhead
+      counters:
+          - ICACHE_64B:IFTAG_HIT
+          - ICACHE_64B:IFTAG_MISS
+      title: icache-overhead

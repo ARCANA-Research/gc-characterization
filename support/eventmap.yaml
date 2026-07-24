@@ -1,0 +1,37 @@
+---
+# Mapping for GC events
+
+Base:
+    # DISABLED: 0
+    JVM: 1
+    GC_STW: 2
+Serial:
+    YOUNG: 3
+    FULL: 4
+Parallel:
+    YOUNG_OR_FULL: 5
+    FULL: 6
+G1:
+    YOUNG: 7
+    FULL: 8
+    REMARK: 9
+    CLEANUP: 10
+Shenandoah:
+    INIT_MARK: 11
+    FINAL_MARK: 12
+    INIT_UPDATE_REFS: 13
+    FINAL_UPDATE_REFS: 14
+    FINAL_ROOTS: 15
+    DEGENERATED: 16
+    FULL: 17
+Z:
+    MARK_START: 18
+    MARK_END: 19
+    RELOCATE_START: 20
+GenZ:
+    YOUNG_MARK_START: 21
+    YOUNG_MARK_END: 22
+    YOUNG_RELOCATE_START: 23
+    MAJOR_MARK_START: 24
+    OLD_MARK_END: 25
+    OLD_RELOCATE_START: 26

@@ -1,0 +1,69 @@
+---
+includes:
+    - '@CURRDIR/running/base.yaml'
+benchmarks:
+    dacapochopin: '@COUNTERBENCHMARKS'
+heap_range: 1
+invocations: '@COUNTERITERATIONS'
+max-attempts: '@COUNTERMAXATTEMPTS'
+minheap_multiplier: '@COUNTERMINHEAPMULTIPLIER'
+configs:
+    - openjdk-21|s|coops|gc_@COUNTERGC|eoom|h2o_m|cassandra_m|trades_m|edump|cores|agent|lp|cp|ld|stats|counter|affinity #|start_jfr
+modifiers:
+    edump:
+        type: JVMArg
+        val: -XX:ErrorFile=@COUNTEROUTDIR/@BMNAME/@COUNTERGC_@INVOCATION_@BMHEAP_error.log
+    affinity:
+        type: JVMArg
+        val: -XX:+EnableGCAffinity -XX:GCAffinityMask=@COUNTERGCAFFINITYMASK -XX:+EnableJDKAffinity -XX:JDKAffinityMask=@COUNTERJVMAFFINITYMASK
+    cores:
+        type: JVMArg
+        val: -XX:ActiveProcessorCount=@COUNTERJVMCORECOUNT
+    agent:
+        type: JVMArg
+        val: -agentpath:@COUNTERBUILDDIR/lib@COUNTERAGENTLIBRARY.so
+    lp:
+        type: JVMArg
+        val: -Djava.library.path=@COUNTERBUILDDIR
+    cp:
+        type: JVMClasspath
+        val: '@COUNTERBUILDDIR'
+    ld:
+        type: EnvVar
+        val: '@COUNTERBUILDDIR/lib@COUNTERAGENTLIBRARY.so'
+        var: LD_PRELOAD
+    stats:
+        type: EnvVar
+        val: '@COUNTEROUTDIR/@BMNAME/@COUNTERGC_@INVOCATION_@BMHEAP_perf.log'
+        var: COUNTER_STATS_FILE
+    counter:
+        type: EnvVar
+        val: '@COUNTEROUTDIR/counters.yaml'
+        var: COUNTER_FILE
+    start_jfr:
+        type: JVMArg
+        val: -XX:StartFlightRecording:settings=@COUNTEROUTDIR/jfr/@COUNTERGC.jfc,maxsize=0,filename=@COUNTEROUTDIR/@BMNAME/@COUNTERGC_@INVOCATION_@BMHEAP.jfr
+runtimes:
+    openjdk-21:
+        home: '@CURRDIR/deps/@COUNTERJDKPATH'
+        release: '@JDKVERSION'
+        type: OpenJDK
+spread_factor: 1
+suites:
+    dacapochopin:
+        callback: DacapoChopinCallback
+        minheap: openjdk-21-@COUNTERGC
+        delay_execution: 5
+        monitors:
+            - systemd-run --scope --property=Slice=user.slice @COUNTERBUILDDIR/verify @COUNTEROUTDIR/@BMNAME/@COUNTERGC_@INVOCATION_@BMHEAP_verify @BMPID
+              @COUNTEROUTDIR/config.yaml
+        minheap_values:
+            openjdk-21-@COUNTERGC: '@COUNTERMINHEAP'
+        path: '@CURRDIR/deps/@COUNTERDACAPOPATH'
+        execution_dump: '@COUNTEROUTDIR/@BMNAME/@COUNTERGC_@INVOCATION_@BMHEAP_run.log'
+        scratch_directory: '@COUNTERTMPDIR/@BMNAME_@COUNTERGC_@INVOCATION_@BMHEAP'
+        size: '@COUNTERSIZE'
+        release: '23.11'
+        timeout: '@COUNTERTIMEOUT'
+        timing_iteration: '@COUNTERRUNS'
+        type: DaCapo

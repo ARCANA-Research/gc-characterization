@@ -1,0 +1,1005 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 3946fed..b7e75de 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -1,7 +1,7 @@
+ [build-system]
+ requires = [
+     "setuptools>=62.3.0",
+-    "setuptools-scm"
++    "setuptools-scm<9.0.0"
+ ]
+ build-backend = "setuptools.build_meta"
+ 
+diff --git a/src/running/benchmark.py b/src/running/benchmark.py
+index 642dd96..ba48fc5 100644
+--- a/src/running/benchmark.py
++++ b/src/running/benchmark.py
+@@ -1,6 +1,8 @@
+ import logging
+ import subprocess
+ import sys
++import time
++from datetime import datetime
+ from time import sleep
+ from typing import Callable, Sequence, TypeVar, List, Optional, Tuple, Union, Dict
+ from running.runtime import D8, JavaScriptCore, Runtime, DummyRuntime, SpiderMonkey
+@@ -9,9 +11,11 @@ from running.util import smart_quote, split_quoted
+ from pathlib import Path
+ from copy import deepcopy
+ import os
++import re
+ from enum import Enum
+ 
+ COMPANION_WAIT_START = 2.0
++MONITOR_WAIT_START = 1.0
+ 
+ 
+ class SubprocessrExit(Enum):
+@@ -36,6 +40,11 @@ class Benchmark(object):
+         runtime_specific_modifiers_strategy: Optional[
+             Callable[[Runtime], Sequence[Modifier]]
+         ] = None,
++        prepend: Optional[str] = None,
++        monitors: Optional[List[str]] = None,
++        execution_dump: Optional[str] = None,
++        delay_execution: Optional[float] = None,
++        pid_file: Optional[str] = None,
+         **kwargs,
+     ):
+         self.name = name
+@@ -51,6 +60,26 @@ class Benchmark(object):
+             self.companion = split_quoted(companion)
+         else:
+             self.companion = []
++        if prepend is not None:
++            self.prepend = prepend.split()
++        else:
++            self.prepend = list()
++        self.monitors = list()
++        if monitors is not None:
++            for monitor in monitors:
++                self.monitors.append(monitor.split())
++        if execution_dump is not None:
++            self.execution_dump = execution_dump
++        else:
++            self.execution_dump = None
++        if delay_execution is not None:
++            self.delay_execution = delay_execution
++        else:
++            self.delay_execution = None
++        if pid_file is not None:
++            self.pid_file = pid_file
++        else:
++            self.pid_file = None
+         self.timeout = timeout
+         # ignore the current working directory provided by commands like runbms or minheap
+         # certain benchmarks expect to be invoked from certain directories
+@@ -78,6 +107,9 @@ class Benchmark(object):
+         # also to type check https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+         return list(self.wrapper)
+ 
++    def get_tokens(self) -> Dict[str, str]:
++        return dict()
++
+     def get_runtime_specific_modifiers(self, runtime: Runtime) -> Sequence[Modifier]:
+         return self.runtime_specific_modifiers_strategy(runtime)
+ 
+@@ -96,9 +128,12 @@ class Benchmark(object):
+                 logging.warning("ModifierSet should have been flattened")
+         return b
+ 
+-    def to_string(self, runtime: Runtime) -> str:
+-        return "{} {}".format(
++    def to_string(
++        self, runtime: Runtime, invocation_number: int = None, heap_size: int = None
++    ) -> str:
++        cmd = "{} {} {}".format(
+             self.get_env_str(),
++            " ".join(self.prepend),
+             " ".join(
+                 [
+                     smart_quote(os.path.expandvars(x))
+@@ -106,23 +141,106 @@ class Benchmark(object):
+                 ]
+             ),
+         )
++        return self.replace_tokens(
++            cmd, invocation_number=invocation_number, heap_size=heap_size
++        )
++
++    def fail_safe_substring(self, curr_str: str, start_idx: int, end_idx: int) -> str:
++        if start_idx == end_idx:
++            return ""
++        return curr_str[start_idx:end_idx]
++
++    def str_replace_tokens(self, curr_val: str, tokens: Dict) -> str:
++        potential_tokens = list(re.finditer(r"@[A-Z]+", curr_val))
++        if len(potential_tokens) == 0:
++            return curr_val
++        new_val = ""
++        curr_pos = 0
++        for potential_token in potential_tokens:
++            new_val += self.fail_safe_substring(
++                curr_val, curr_pos, potential_token.span()[0]
++            )
++            tk = potential_token.group()[1:]
++            if tk in tokens:
++                if type(tokens[tk]) is str:
++                    new_val += tokens[tk]
++                else:
++                    new_val += str(tokens[tk])
++            else:
++                new_val += f"@{tk}"
++            curr_pos = potential_token.span()[1]
++        new_val += self.fail_safe_substring(curr_val, curr_pos, len(curr_val))
++        return new_val
++
++    def replace_tokens(
++        self,
++        cmd: Union[List[str], str, Dict[str, str]],
++        invocation_number: int = None,
++        heap_size: int = None,
++        pid: int = None,
++    ) -> str:
++        if type(cmd) is dict:
++            for k in cmd.keys():
++                cmd[k] = self.replace_tokens(
++                    cmd[k],
++                    invocation_number=invocation_number,
++                    heap_size=heap_size,
++                    pid=pid,
++                )
++            return cmd
++        if type(cmd) is list:
++            for i in range(len(cmd)):
++                cmd[i] = self.replace_tokens(
++                    cmd[i],
++                    invocation_number=invocation_number,
++                    heap_size=heap_size,
++                    pid=pid,
++                )
++            return cmd
++        if type(cmd) is str:
++            tokens = self.get_tokens()
++            if invocation_number is not None:
++                tokens["INVOCATION"] = invocation_number
++            if heap_size is not None:
++                tokens["BMHEAP"] = heap_size
++            if pid is not None:
++                tokens["BMPID"] = pid
++            return self.str_replace_tokens(cmd, tokens)
++        return None
+ 
+     def run(
+-        self, runtime: Runtime, cwd: Optional[Path] = None
++        self,
++        runtime: Runtime,
++        cwd: Optional[Path] = None,
++        invocation_number: int = None,
++        heap_size: int = None,
+     ) -> Tuple[bytes, bytes, SubprocessrExit]:
+         from running import suite
+ 
+         if suite.is_dry_run():
+-            print(self.to_string(runtime), file=sys.stderr)
++            print(
++                f"\n{self.to_string(runtime, invocation_number, heap_size)}",
++                file=sys.stderr,
++                flush=True,
++            )
+             return b"", b"", SubprocessrExit.Dryrun
+         else:
++            if self.delay_execution is not None:
++                sleep(self.delay_execution)
+             cmd = self.get_full_args(runtime)
+             cmd = [os.path.expandvars(x) for x in cmd]
+             env_args_to_add = {
+                 k: os.path.expandvars(v) for k, v in self.env_args.items()
+             }
++            cmd = self.prepend + cmd
++            cmd = self.replace_tokens(
++                cmd, invocation_number=invocation_number, heap_size=heap_size
++            )
+             env_args = os.environ.copy()
+             env_args.update(env_args_to_add)
++            env_args = self.replace_tokens(
++                env_args, invocation_number=invocation_number, heap_size=heap_size
++            )
+             companion_out = b""
+             stdout: Optional[bytes]
+             if self.companion:
+@@ -130,24 +248,110 @@ class Benchmark(object):
+                     self.companion, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+                 )
+                 sleep(COMPANION_WAIT_START)
++            error_string = None
+             try:
+-                p = subprocess.run(
+-                    cmd,
+-                    env=env_args,
+-                    stdout=subprocess.PIPE,
+-                    stderr=subprocess.STDOUT,
+-                    timeout=self.timeout,
+-                    cwd=self.override_cwd if self.override_cwd else cwd,
+-                )
++                stdout_dump = subprocess.PIPE
++                stderr_dump = subprocess.STDOUT
++                execution_dump_file = None
++                execution_start_time = None
++                if self.execution_dump is not None:
++                    self.execution_dump = self.replace_tokens(
++                        self.execution_dump,
++                        invocation_number=invocation_number,
++                        heap_size=heap_size,
++                    )
++                    execution_dump_file = open(self.execution_dump, "w")
++                    stdout_dump = execution_dump_file
++                    stderr_dump = execution_dump_file
++                    curr_time = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
++                    execution_dump_file.write(f"START TIME: {curr_time}\n")
++                    execution_dump_file.flush()
++                    execution_start_time = time.time()
++                if self.monitors is not None:
++                    p = subprocess.Popen(
++                        cmd,
++                        env=env_args,
++                        stdout=stdout_dump,
++                        stderr=stderr_dump,
++                        cwd=self.override_cwd if self.override_cwd else cwd,
++                    )
++                    sleep(MONITOR_WAIT_START)
++                    exec_pid = p.pid
++                    if self.pid_file is not None:
++                        self.pid_file = self.replace_tokens(
++                            self.pid_file,
++                            invocation_number=invocation_number,
++                            heap_size=heap_size,
++                        )
++                        with open(self.pid_file, "r") as f_pid:
++                            str_pid = f_pid.read()
++                            exec_pid = int(str_pid.strip())
++                            execution_dump_file.write(f"PARSED PID: {exec_pid}\n")
++                    p_monitors = list()
++                    for monitor in self.monitors:
++                        monitor = self.replace_tokens(
++                            monitor,
++                            invocation_number=invocation_number,
++                            heap_size=heap_size,
++                            pid=exec_pid,
++                        )
++                        p_monitors.append(
++                            subprocess.Popen(
++                                monitor,
++                                stdout=stdout_dump,
++                                stderr=stderr_dump,
++                                cwd=self.override_cwd if self.override_cwd else cwd,
++                            )
++                        )
++                    stdout, _ = p.communicate(
++                        timeout=self.timeout,
++                    )
++                    if self.execution_dump is not None:
++                        stdout = b""
++                    for i in range(len(p_monitors)):
++                        _, _ = p_monitors[i].communicate()
++                else:
++                    p = subprocess.run(
++                        cmd,
++                        env=env_args,
++                        stdout=subprocess.PIPE,
++                        stderr=subprocess.STDOUT,
++                        timeout=self.timeout,
++                        cwd=self.override_cwd if self.override_cwd else cwd,
++                    )
++                    stdout = p.stdout
+                 subprocess_exit = SubprocessrExit.Normal
+-                stdout = p.stdout
+             except subprocess.CalledProcessError as e:
+                 subprocess_exit = SubprocessrExit.Error
+                 stdout = e.stdout
++                error_string = "SUBPROCESS ERROR"
+             except subprocess.TimeoutExpired as e:
+                 subprocess_exit = SubprocessrExit.Timeout
+                 stdout = e.stdout
++                error_string = "SUBPROCESS TIMEOUT"
++                p.kill()
++            except Exception as e:
++                subprocess_exit = SubprocessrExit.Error
++                stdout = e.stdout
++                error_string = f"EXCEPTION -> {e.__class__.__name__}"
++                p.kill()
+             finally:
++                if self.execution_dump is not None:
++                    curr_time = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
++                    execution_dump_file.flush()
++                    if error_string is not None:
++                        execution_dump_file.write(f"ERROR -> {error_string}\n")
++                    if execution_start_time is not None:
++                        execution_end_time = time.time()
++                        total_execution_time = execution_end_time - execution_start_time
++                        execution_dump_file.write(
++                            f"EXECUTION TIME (seconds) -> {total_execution_time:.2f}\n"
++                        )
++                    execution_dump_file.write(f"END TIME: {curr_time}\n")
++                    execution_dump_file.close()
++                    execution_dump_file = open(self.execution_dump, "r")
++                    stdout = execution_dump_file.read()
++                    execution_dump_file.close()
+                 if self.companion:
+                     try:
+                         companion_stdout, _ = companion_p.communicate(timeout=10)
+@@ -162,7 +366,8 @@ class Benchmark(object):
+                             logging.warning("Failed to kill.")
+                         companion_stdout, _ = companion_p.communicate()
+                         companion_out += companion_stdout
+-
++                if self.execution_dump is not None:
++                    return stdout.encode("utf-8"), companion_out, subprocess_exit
+             return stdout if stdout else b"", companion_out, subprocess_exit
+ 
+ 
+@@ -230,6 +435,11 @@ class JavaBenchmark(Benchmark):
+                 logging.warning("JSArg not respected by JavaBenchmark")
+         return jb
+ 
++    def get_tokens(self) -> Dict[str, str]:
++        return {
++            "BMNAME": self.name,
++        }
++
+     def get_full_args(self, runtime: Runtime) -> List[Union[str, Path]]:
+         cmd = super().get_full_args(runtime)
+         cmd.append(runtime.get_executable())
+@@ -318,3 +528,37 @@ class JuliaBenchmark(Benchmark):
+         cmd.extend(["-n", "1"])  # one run
+         cmd.extend(self.program_args)
+         return cmd
++
++
++class SpecCPUBenchmark(Benchmark):
++    def __init__(self, program_args: List[str], **kwargs):
++        super().__init__(**kwargs)
++        self.spec_args = list()
++        self.program_args = program_args
++
++    def __str__(self) -> str:
++        return self.to_string(DummyRuntime("runcpu"))
++
++    def attach_modifiers(self, modifiers: Sequence[Modifier]) -> "SpecCPUBenchmark":
++        bb = super().attach_modifiers(modifiers)
++        for m in modifiers:
++            if not m.should_attach(self.suite_name, self.name) or type(m) == EnvVar:
++                continue
++            elif type(m) == SpecCPUArg:
++                bb.spec_args.extend(m.val)
++            else:
++                logging.warning(f"{type(m)} not respected by SpecCPUBenchmark")
++        return bb
++
++    def get_tokens(self) -> Dict[str, str]:
++        return {
++            "BMNAME": self.name,
++        }
++
++    def get_full_args(self, runtime: Runtime) -> List[Union[str, Path]]:
++        cmd = super().get_full_args(runtime)
++        cmd.append(runtime.get_executable())
++        cmd.extend(self.program_args)
++        cmd.extend(self.spec_args)
++        cmd.extend([self.name])
++        return cmd
+diff --git a/src/running/command/runbms.py b/src/running/command/runbms.py
+index 35dbf03..5eceea7 100644
+--- a/src/running/command/runbms.py
++++ b/src/running/command/runbms.py
+@@ -42,6 +42,7 @@ minheap_multiplier: float
+ remote_host: Optional[str]
+ skip_oom: Optional[int]
+ skip_timeout: Optional[int]
++skip_error: Optional[int]
+ skip_log_compression: bool = False
+ plugins: Dict[str, Any]
+ resume: Optional[str]
+@@ -60,6 +61,7 @@ def setup_parser(subparsers):
+     f.add_argument("-m", "--minheap-multiplier", type=float)
+     f.add_argument("--skip-oom", type=int)
+     f.add_argument("--skip-timeout", type=int)
++    f.add_argument("--skip-error", type=int)
+     f.add_argument("--resume", type=str)
+     f.add_argument("--workdir", type=Path)
+     f.add_argument(
+@@ -137,7 +139,12 @@ def get_hfacs(
+ 
+ 
+ def run_benchmark_with_config(
+-    c: str, b: Benchmark, runbms_dir: Path, size: Optional[int], fd: Optional[BinaryIO]
++    c: str,
++    b: Benchmark,
++    runbms_dir: Path,
++    size: Optional[int],
++    fd: Optional[BinaryIO],
++    invocation_number: int,
+ ) -> Tuple[bytes, SubprocessrExit]:
+     runtime, mods = parse_config_str(configuration, c)
+     mod_b = b.attach_modifiers(mods)
+@@ -147,7 +154,9 @@ def run_benchmark_with_config(
+     if fd:
+         prologue = get_log_prologue(runtime, mod_b)
+         fd.write(prologue.encode("ascii"))
+-    output, companion_out, exit_status = mod_b.run(runtime, cwd=runbms_dir)
++    output, companion_out, exit_status = mod_b.run(
++        runtime, cwd=runbms_dir, invocation_number=invocation_number, heap_size=size
++    )
+     if fd:
+         fd.write(output)
+         if companion_out:
+@@ -244,6 +253,7 @@ def get_log_prologue(runtime: Runtime, bm: Benchmark) -> str:
+ 
+ 
+ def run_one_benchmark(
++    max_attempts: int,
+     invocations: int,
+     suite: BenchmarkSuite,
+     bm: Benchmark,
+@@ -268,6 +278,10 @@ def run_one_benchmark(
+     oomed_count = defaultdict(int)
+     timeout_count: DefaultDict[str, int]
+     timeout_count = defaultdict(int)
++    error_count: DefaultDict[str, int]
++    error_count = defaultdict(int)
++    passed_count: DefaultDict[str, int]
++    passed_count = defaultdict(int)
+     logged_in_users: Set[str]
+     logged_in_users = get_logged_in_users()
+     if len(logged_in_users) > 1:
+@@ -275,11 +289,19 @@ def run_one_benchmark(
+             "More than one user logged in: {}".format(" ".join(logged_in_users))
+         )
+     ever_ran = [False] * len(configs)
+-    for i in range(0, invocations):
++    for i in range(0, max_attempts):
+         for p in plugins.values():
+             p.start_invocation(hfac, size, bm, i)
+         print(i, end="", flush=True)
+         for j, c in enumerate(configs):
++            if passed_count[c] == invocations:
++                print(".", end="", flush=True)
++                continue
++            elif (invocations - passed_count[c]) > (
++                max_attempts - i
++            ) and not is_dry_run():
++                print(".", end="", flush=True)
++                continue
+             config_passed = False
+             for p in plugins.values():
+                 p.start_config(hfac, size, bm, i, c, j)
+@@ -289,6 +311,9 @@ def run_one_benchmark(
+             if skip_timeout is not None and timeout_count[c] >= skip_timeout:
+                 print(".", end="", flush=True)
+                 continue
++            if skip_error is not None and error_count[c] >= skip_error:
++                print(".", end="", flush=True)
++                continue
+             if resume:
+                 log_filename_completed = get_filename_completed(bm, hfac, size, c)
+                 if (log_dir / log_filename_completed).exists():
+@@ -299,33 +324,47 @@ def run_one_benchmark(
+             runtime, _ = parse_config_str(configuration, c)
+             if is_dry_run():
+                 output, exit_status = run_benchmark_with_config(
+-                    c, bm, runbms_dir, size, None
++                    c, bm, runbms_dir, size, None, i
+                 )
+                 assert exit_status is SubprocessrExit.Dryrun
+             else:
+                 fd: BinaryIO
+                 with (log_dir / log_filename).open("ab") as fd:
+                     output, exit_status = run_benchmark_with_config(
+-                        c, bm, runbms_dir, size, fd
++                        c, bm, runbms_dir, size, fd, i
+                     )
+                 ever_ran[j] = True
++            messages_arr = list()
++            has_error = False
+             if runtime.is_oom(output):
++                has_error = True
+                 oomed_count[c] += 1
++                messages_arr.append("oom")
++            if runtime.is_validation_failure(output):
++                has_error = True
++                messages_arr.append("validation failed")
++            if runtime.is_failed(output):
++                has_error = True
++                messages_arr.append("execution failed")
+             if exit_status is SubprocessrExit.Timeout:
+                 timeout_count[c] += 1
+-                print(".", end="", flush=True)
+-            elif exit_status is SubprocessrExit.Error:
+-                print(".", end="", flush=True)
++                error_count[c] += 1
++                messages_arr.append("timeout")
++            elif exit_status is SubprocessrExit.Error or has_error:
++                messages_arr.append("error")
++                error_count[c] += 1
+             elif exit_status is SubprocessrExit.Normal:
+                 if suite.is_passed(output):
+                     config_passed = True
+-                    print(config_index_to_chr(j), end="", flush=True)
++                    passed_count[c] += 1
++                    messages_arr.append(f"passed -> {config_index_to_chr(j)}")
+                 else:
+-                    print(".", end="", flush=True)
++                    messages_arr.append("failed")
+             elif exit_status is SubprocessrExit.Dryrun:
+-                print(".", end="", flush=True)
++                messages_arr.append(".")
+             else:
+                 raise ValueError("Not a valid SubprocessrExit value")
++            print(f"[{','.join(messages_arr)}]", end="", flush=True)
+             for p in plugins.values():
+                 p.end_config(hfac, size, bm, i, c, j, config_passed)
+ 
+@@ -344,6 +383,7 @@ def run_one_benchmark(
+ 
+ 
+ def run_one_hfac(
++    max_attempts: int,
+     invocations: int,
+     hfac: Optional[float],
+     suites: Dict[str, BenchmarkSuite],
+@@ -359,7 +399,7 @@ def run_one_hfac(
+         suite = suites[suite_name]
+         for bm in bms:
+             run_one_benchmark(
+-                invocations, suite, bm, hfac, configs, runbms_dir, log_dir
++                max_attempts, invocations, suite, bm, hfac, configs, runbms_dir, log_dir
+             )
+             rsync(log_dir)
+     for p in plugins.values():
+@@ -410,6 +450,8 @@ def run(args):
+         skip_oom = args.get("skip_oom")
+         global skip_timeout
+         skip_timeout = args.get("skip_timeout")
++        global skip_error
++        skip_error = args.get("skip_error")
+         global skip_log_compression
+         skip_log_compression = args.get("skip_log_compression")
+         # Load from configuration file
+@@ -425,6 +467,11 @@ def run(args):
+         invocations = configuration.get("invocations")
+         if args.get("invocations"):
+             invocations = args.get("invocations")
++        max_attempts = configuration.get("max-attempts")
++        if args.get("max-attempts"):
++            max_attempts = args.get("max-attempts")
++        if max_attempts is None:
++            max_attempts = invocations
+         global minheap_multiplier
+         minheap_multiplier = configuration.get("minheap_multiplier")
+         if args.get("minheap_multiplier"):
+@@ -466,6 +513,7 @@ def run(args):
+         if not slice and N is None:
+             # run all configs without specifying heap size
+             run_one_hfac(
++                max_attempts,
+                 invocations,
+                 None,  # not specifying heap size
+                 suites,
+@@ -482,6 +530,7 @@ def run(args):
+         if configs_no_heapsize:
+             logging.info("Running all configs with NoImplicitHeapSizeModifier set")
+             run_one_hfac(
++                max_attempts,
+                 invocations,
+                 None,  # not specifying heap size
+                 suites,
+@@ -498,6 +547,7 @@ def run(args):
+             )
+             for hfac in hfacs:
+                 run_one_hfac(
++                    max_attempts,
+                     invocations,
+                     hfac,
+                     suites,
+diff --git a/src/running/modifier.py b/src/running/modifier.py
+index 9714072..01c17b1 100644
+--- a/src/running/modifier.py
++++ b/src/running/modifier.py
+@@ -189,3 +189,13 @@ class NoImplicitHeapsizeModifier(Modifier):
+ 
+     def __str__(self) -> str:
+         return "{} NoImplicitHeapsizeModifier".format(super().__str__())
++
++
++@register(Modifier)
++class SpecCPUArg(Modifier):
++    def __init__(self, value_opts=None, **kwargs):
++        super().__init__(value_opts, **kwargs)
++        self.val = split_quoted(self._kwargs["val"])
++
++    def __str__(self) -> str:
++        return "{} SpecCPUArg {}".format(super().__str__(), self.val)
+diff --git a/src/running/runtime.py b/src/running/runtime.py
+index b7e2115..0f09d6e 100644
+--- a/src/running/runtime.py
++++ b/src/running/runtime.py
+@@ -4,6 +4,7 @@ from pathlib import Path
+ import logging
+ from running.util import register
+ import os.path
++import shutil
+ 
+ 
+ class Runtime(object):
+@@ -26,6 +27,12 @@ class Runtime(object):
+     def is_oom(self, _output: bytes) -> bool:
+         raise NotImplementedError
+ 
++    def is_validation_failure(self, _output: bytes) -> bool:
++        raise NotImplementedError
++
++    def is_failed(self, output: bytes) -> bool:
++        raise NotImplementedError
++
+ 
+ class DummyRuntime(Runtime):
+     def __init__(self, executable: str):
+@@ -38,6 +45,9 @@ class DummyRuntime(Runtime):
+     def is_oom(self, _output: bytes) -> bool:
+         return False
+ 
++    def is_failed(self, output: bytes) -> bool:
++        raise NotImplementedError
++
+ 
+ @register(Runtime)
+ class NativeExecutable(Runtime):
+@@ -75,11 +85,23 @@ class JVM(Runtime):
+             b"OutOfMemoryError",
+             b"ran out of memory",
+             b"panicked at 'Out of memory!'",
++            b"Please increase heap size using the",
++        ]:
++            if pattern in output:
++                return True
++        return False
++
++    def is_validation_failure(self, output: bytes) -> bool:
++        for pattern in [
++            b"Validation FAILED",
+         ]:
+             if pattern in output:
+                 return True
+         return False
+ 
++    def is_failed(self, output: bytes) -> bool:
++        return False
++
+ 
+ @register(Runtime)
+ class OpenJDK(JVM):
+@@ -105,6 +127,9 @@ class OpenJDK(JVM):
+     def __str__(self):
+         return "{} OpenJDK {} {}".format(super().__str__(), self.release, self.home)
+ 
++    def is_failed(self, output: bytes) -> bool:
++        return False
++
+ 
+ @register(Runtime)
+ class JikesRVM(JVM):
+@@ -247,3 +272,30 @@ class JuliaStock(Julia):
+ 
+     def is_oom(self, output: bytes) -> bool:
+         return False
++
++
++@register(Runtime)
++class SpecCPU(JVM):
++    def __init__(self, **kwargs):
++        super().__init__(**kwargs)
++        self.release = kwargs["release"]
++        try:
++            self.release = int(self.release)
++        except ValueError:
++            raise TypeError("The release year of an SPEC CPU has to be int-like")
++        self.build: Path
++        self.build = Path(os.path.expandvars(kwargs["build"]))
++        if not self.build.exists():
++            logging.warning("SPEC CPU build {} doesn't exist".format(self.build))
++        self.executable = "runcpu"
++        if shutil.which(self.executable) is None:
++            logging.warning("runcpu command not found, did you source SPEC CPU?")
++
++    def get_executable(self) -> Path:
++        return self.executable
++
++    def is_failed(self, output: bytes) -> bool:
++        return b"Error:" in output
++
++    def __str__(self):
++        return "{} SpecCPU {} {}".format(super().__str__(), self.release, self.home)
+diff --git a/src/running/suite.py b/src/running/suite.py
+index 8146aa8..bd6c0d1 100644
+--- a/src/running/suite.py
++++ b/src/running/suite.py
+@@ -1,11 +1,12 @@
+ from pathlib import Path
+-from typing import Any, Dict, Optional, Union
++from typing import Any, Dict, Optional, Union, List
+ from running.benchmark import (
+     JavaBenchmark,
+     BinaryBenchmark,
+     Benchmark,
+     JavaScriptBenchmark,
+     JuliaBenchmark,
++    SpecCPUBenchmark,
+ )
+ import logging
+ from running.util import register, split_quoted
+@@ -155,6 +156,20 @@ class DaCapo(JavaBenchmarkSuite):
+         self.wrapper = kwargs.get("wrapper")
+         self.companion: Optional[Union[Dict[str, str], str]]
+         self.companion = kwargs.get("companion")
++        self.prepend: Optional[str]
++        self.prepend = kwargs.get("prepend")
++        self.pid_file: Optional[str]
++        self.pid_file = kwargs.get("pid_file")
++        self.monitors: Optional[List[str]]
++        self.monitors = kwargs.get("monitors")
++        self.execution_dump: Optional[str]
++        self.execution_dump = kwargs.get("execution_dump")
++        self.delay_execution: Optional[float]
++        self.delay_execution = kwargs.get("delay_execution")
++        if self.delay_execution is not None:
++            self.delay_execution = float(self.delay_execution)
++        self.scratch_directory: Optional[str]
++        self.scratch_directory = kwargs.get("scratch_directory")
+         # user overriding the default size for the entire suite
+         self.size: Optional[str]
+         self.size = kwargs.get("size")
+@@ -180,6 +195,7 @@ class DaCapo(JavaBenchmarkSuite):
+         timing_iteration = self.timing_iteration
+         timeout = self.timeout
+         size = self.size
++        scratch_directory = self.scratch_directory
+         if type(bm_spec) is str:
+             bm_name = bm_spec
+             name = bm_spec
+@@ -219,6 +235,8 @@ class DaCapo(JavaBenchmarkSuite):
+         # Input size
+         if size:
+             program_args.extend(["-s", size])
++        if scratch_directory:
++            program_args.extend(["--scratch-directory", scratch_directory])
+         # Name of the benchmark
+         program_args.append(bm_name)
+ 
+@@ -231,6 +249,11 @@ class DaCapo(JavaBenchmarkSuite):
+             suite_name=self.name,
+             name=name,
+             timeout=timeout,
++            prepend=self.get_prepend(),
++            monitors=self.get_monitors(),
++            execution_dump=self.get_execution_dump(),
++            delay_execution=self.get_delay_execution(),
++            pid_file=self.get_pid_file(),
+         )
+ 
+     def get_minheap(self, bm: Benchmark) -> int:
+@@ -278,6 +301,153 @@ class DaCapo(JavaBenchmarkSuite):
+                 "differerent benchmarks)".format(self.name)
+             )
+ 
++    def get_prepend(self) -> Optional[str]:
++        return self.prepend
++
++    def get_monitors(self) -> Optional[List[str]]:
++        return self.monitors
++
++    def get_execution_dump(self) -> Optional[str]:
++        return self.execution_dump
++
++    def get_delay_execution(self) -> Optional[float]:
++        return self.delay_execution
++
++    def get_pid_file(self) -> Optional[str]:
++        return self.pid_file
++
++
++@register(BenchmarkSuite)
++class Renaissance(JavaBenchmarkSuite):
++    def __init__(self, **kwargs):
++        super().__init__(**kwargs)
++        self.release: str
++        self.release = kwargs["release"]
++        if self.release not in ["0.16.1"]:
++            raise ValueError(
++                "Renaissance release {} not recognized".format(self.release)
++            )
++        self.path: Path
++        self.path = Path(os.path.expandvars(kwargs["path"]))
++        if not self.path.exists():
++            logging.warning("Renaissance jar {} not found".format(self.path))
++        self.minheap: Optional[str]
++        self.minheap = kwargs.get("minheap")
++        self.minheap_values: Dict[str, Dict[str, int]]
++        self.minheap_values = kwargs.get("minheap_values", {})
++        if not isinstance(self.minheap_values, dict):
++            raise TypeError(
++                "The minheap_values of {} should be a dictionary".format(self.name)
++            )
++        if self.minheap:
++            if not isinstance(self.minheap, str):
++                raise TypeError(
++                    "The minheap of {} should be a string that selects from a minheap_values".format(
++                        self.name
++                    )
++                )
++            if self.minheap not in self.minheap_values:
++                raise KeyError(
++                    "{} is not a valid entry of {}.minheap_values".format(
++                        self.name, self.name
++                    )
++                )
++        self.timing_iteration = Optional[int]
++        self.timing_iteration = kwargs.get("timing_iteration")
++        assert self.timing_iteration
++        self.plugin: Optional[str]
++        self.plugin = kwargs.get("plugin")
++        self.timeout: Optional[int]
++        self.timeout = kwargs.get("timeout")
++        self.prepend: Optional[str]
++        self.prepend = kwargs.get("prepend")
++        self.monitors: Optional[List[str]]
++        self.monitors = kwargs.get("monitors")
++        self.execution_dump: Optional[str]
++        self.execution_dump = kwargs.get("execution_dump")
++        self.delay_execution: Optional[float]
++        self.delay_execution = kwargs.get("delay_execution")
++        if self.delay_execution is not None:
++            self.delay_execution = float(self.delay_execution)
++        self.scratch_directory: Optional[str]
++        self.scratch_directory = kwargs.get("scratch_directory")
++
++    def __str__(self) -> str:
++        return "{} Renaissance {} {}".format(super().__str__(), self.release, self.path)
++
++    def get_benchmark(self, bm_spec: Union[str, Dict[str, Any]]) -> "JavaBenchmark":
++        timing_iteration = self.timing_iteration
++        timeout = self.timeout
++        scratch_directory = self.scratch_directory
++        if type(bm_spec) is str:
++            bm_name = bm_spec
++            name = bm_spec
++        else:
++            assert type(bm_spec) is dict
++            if "bm_name" not in bm_spec or "name" not in bm_spec:
++                raise KeyError(
++                    "When a dictionary is used to speicfy a benchmark, you need to provide both `name` and `bm_name`"
++                )
++            bm_name = bm_spec["bm_name"]
++            name = bm_spec["name"]
++            if "timing_iteration" in bm_spec:
++                timing_iteration = bm_spec["timing_iteration"]
++            if "timeout" in bm_spec:
++                timeout = bm_spec["timeout"]
++        if self.plugin:
++            cp = [str(self.path)]
++            program_args = ["org.renaissance.core.Launcher", "--plugin", self.plugin]
++        else:
++            cp = []
++            program_args = ["-jar", str(self.path)]
++        # Timing iteration
++        program_args.extend(["-r", str(timing_iteration)])
++        if scratch_directory:
++            program_args.extend(["--scratch-base", scratch_directory])
++            # program_args.extend(["--keep-scratch"])
++        # Name of the benchmark
++        program_args.append(bm_name)
++
++        return JavaBenchmark(
++            jvm_args=[],
++            program_args=program_args,
++            cp=cp,
++            suite_name=self.name,
++            name=name,
++            timeout=timeout,
++            prepend=self.get_prepend(),
++            monitors=self.get_monitors(),
++            execution_dump=self.get_execution_dump(),
++            delay_execution=self.get_delay_execution(),
++        )
++
++    def get_minheap(self, bm: Benchmark) -> int:
++        assert isinstance(bm, JavaBenchmark)
++        name = bm.name
++        if not self.minheap:
++            logging.warning("No minheap_value of {} is selected".format(self))
++            return DEFAULT_MINHEAP
++        minheap = self.minheap_values[self.minheap]
++        if name not in minheap:
++            logging.warning("Minheap for {} of {} not set".format(name, self))
++            return DEFAULT_MINHEAP
++        return minheap[name]
++
++    def is_passed(self, output: bytes) -> bool:
++        return f"{self.timing_iteration - 1} completed".encode("ascii") in output
++
++    def get_prepend(self) -> Optional[str]:
++        return self.prepend
++
++    def get_monitors(self) -> Optional[List[str]]:
++        return self.monitors
++
++    def get_execution_dump(self) -> Optional[str]:
++        return self.execution_dump
++
++    def get_delay_execution(self) -> Optional[float]:
++        return self.delay_execution
++
+ 
+ @register(BenchmarkSuite)
+ class SPECjbb2015(JavaBenchmarkSuite):
+@@ -517,3 +687,60 @@ class JuliaGCBenchmarks(BenchmarkSuite):
+     def is_passed(self, output: bytes) -> bool:
+         # FIXME
+         return True
++
++
++@register(BenchmarkSuite)
++class SpecCPU(BenchmarkSuite):
++    def __init__(self, **kwargs):
++        super().__init__(**kwargs)
++        self.size: Optional[str]
++        self.size = kwargs.get("size")
++        self.iterations: Optional[int]
++        self.iterations = kwargs.get("iterations")
++        self.config: Optional[str]
++        self.config = kwargs.get("config")
++        self.execution_dump: Optional[str]
++        self.execution_dump = kwargs.get("execution_dump")
++        self.threads: Optional[int]
++        self.threads = kwargs.get("threads")
++        self.prepend: Optional[str]
++        self.prepend = kwargs.get("prepend")
++
++    def get_benchmark(self, bm_spec: Union[str, Dict[str, Any]]) -> "SpecCPUBenchmark":
++        assert type(bm_spec) is str
++        program_args = list()
++        if self.size:
++            program_args.extend(["--size", self.size])
++        else:
++            logging.warning("size is missing for SpecCPUBenchmarkSuite")
++        if self.iterations:
++            program_args.extend(["--iterations", str(self.iterations)])
++        if self.config:
++            program_args.extend(["--config", self.config])
++        else:
++            logging.warning("config is missing for SpecCPUBenchmarkSuite")
++        if self.threads:
++            program_args.extend(["--threads", str(self.threads)])
++        return SpecCPUBenchmark(
++            suite_name=self.name,
++            name=bm_spec,
++            timeout=None,
++            execution_dump=self.get_execution_dump(),
++            program_args=program_args,
++            prepend=self.get_prepend(),
++        )
++
++    def get_minheap(self, bm: Benchmark) -> int:
++        logging.warning("minheap is not respected for SpecCPUBenchmarkSuite")
++        assert isinstance(bm, SpecCPUBenchmark)
++        return 0
++
++    def is_passed(self, _output: bytes) -> bool:
++        # FIXME no generic way to know
++        return True
++
++    def get_execution_dump(self) -> Optional[str]:
++        return self.execution_dump
++
++    def get_prepend(self) -> Optional[str]:
++        return self.prepend

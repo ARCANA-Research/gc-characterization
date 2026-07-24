@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Shenandoah JFR Config -->
+
+<configuration version="2.0" label="Minimal JFR Config">
+    <event name="DacapoChopinCallback$DaCapoJfr"></event>
+    <event name="jdk.GCHeapSummary">
+      <setting name="enabled">true</setting>
+    </event>
+    <event name="jdk.GarbageCollection">
+      <setting name="enabled">true</setting>
+    </event>
+</configuration>

@@ -1,0 +1,423 @@
+---
+# ============================== Agent Counters ============================== #
+    - type: static
+      counter: GC_THREAD_COUNT
+      title: gc-thread-count
+    - type: static
+      counter: GC_PHASE_COUNT
+      title: gc-phase-count
+    - type: resource_usage
+      counter: GC_CPU_PERCENT
+      title: gc-cpu-percent
+    - type: overhead
+      counters:
+          - time
+      title: t_o
+    - type: count
+      counters:
+          - time
+      title: t_c
+    - type: p99
+      counter: time
+      title: t_99
+    - type: mean
+      counter: time
+      title: t_m
+# ============================= Instruction Count ============================ #
+    - type: overhead
+      counters:
+          - insts
+      title: i_o
+    - type: count
+      counters:
+          - total_insts
+      title: t_i
+    - type: division
+      counters:
+          denominator: total_cycles
+          numerator: total_insts
+      title: ipc
+# ================================ Load to Use =============================== #
+    - type: count
+      counters:
+          - loadtouse
+      title: l2u
+# ================================= L1 Cache ================================= #
+    - type: accuracy
+      counters:
+          hit: l1_load_demand_hits
+          miss: l1_load_demand_misses
+      title: l1_lhr
+    - type: overhead
+      counters:
+          - l1_load_demand_hits
+          - l1_load_demand_misses
+      title: l1_lo
+    - type: count
+      counters:
+          - l1_demand_lines_allocated
+      title: l1_dla
+    - type: count
+      counters:
+          - l1_total_demand_lines_allocated
+      title: l1_tdla
+    - type: count
+      counters:
+          - l1_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      title: l1_labgabgalo
+    - type: count
+      counters:
+          - l1_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l1_labgabngalo
+    - type: count
+      counters:
+          - l1_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      title: l1_labngabgalo
+    - type: count
+      counters:
+          - l1_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      title: l1_labngabngalo
+    - type: count
+      counters:
+          - l1_gc_lines_accessed_by_gc
+      title: l1_glabg
+    - type: count
+      counters:
+          - l1_gc_lines_accessed_by_non_gc
+      title: l1_glabng
+    - type: count
+      counters:
+          - l1_non_gc_lines_accessed_by_gc
+      title: l1_nglabg
+    - type: count
+      counters:
+          - l1_non_gc_lines_accessed_by_non_gc
+      title: l1_nglabng
+    - type: accuracy
+      counters:
+          hit: l1_lines_allocated_by_gc_accessed_by_gc_at_least_once
+          miss: l1_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l1_sl
+    - type: accuracy
+      counters:
+          hit: l1_gc_lines_accessed_by_gc
+          miss: l1_gc_lines_accessed_by_non_gc
+      title: l1_sla
+    - type: count
+      counters:
+          - l1_load_demand_misses
+      title: l1_ldm
+    - type: count
+      counters:
+          - l1_load_demand_hits
+      title: l1_ldh
+    - type: count
+      counters:
+          - l1_store_demand_misses
+      title: l1_sdm
+    - type: count
+      counters:
+          - l1_store_demand_hits
+      title: l1_sdh
+# ================================= L2 Cache ================================= #
+    - type: accuracy
+      counters:
+          hit: l2_load_demand_hits
+          miss: l2_load_demand_misses
+      title: l2_lhr
+    - type: overhead
+      counters:
+          - l2_load_demand_hits
+          - l2_load_demand_misses
+      title: l2_lo
+    - type: count
+      counters:
+          - l2_demand_lines_allocated
+      title: l2_dla
+    - type: count
+      counters:
+          - l2_total_demand_lines_allocated
+      title: l2_tdla
+    - type: count
+      counters:
+          - l2_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      title: l2_labgabgalo
+    - type: count
+      counters:
+          - l2_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l2_labgabngalo
+    - type: count
+      counters:
+          - l2_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      title: l2_labngabgalo
+    - type: count
+      counters:
+          - l2_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      title: l2_labngabngalo
+    - type: count
+      counters:
+          - l2_gc_lines_accessed_by_gc
+      title: l2_glabg
+    - type: count
+      counters:
+          - l2_gc_lines_accessed_by_non_gc
+      title: l2_glabng
+    - type: count
+      counters:
+          - l2_non_gc_lines_accessed_by_gc
+      title: l2_nglabg
+    - type: count
+      counters:
+          - l2_non_gc_lines_accessed_by_non_gc
+      title: l2_nglabng
+    - type: accuracy
+      counters:
+          hit: l2_lines_allocated_by_gc_accessed_by_gc_at_least_once
+          miss: l2_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l2_sl
+    - type: accuracy
+      counters:
+          hit: l2_gc_lines_accessed_by_gc
+          miss: l2_gc_lines_accessed_by_non_gc
+      title: l2_sla
+    - type: count
+      counters:
+          - l2_load_demand_misses
+      title: l2_ldm
+    - type: count
+      counters:
+          - l2_load_demand_hits
+      title: l2_ldh
+    - type: count
+      counters:
+          - l2_store_demand_misses
+      title: l2_sdm
+    - type: count
+      counters:
+          - l2_store_demand_hits
+      title: l2_sdh
+# ================================= L3 Cache ================================= #
+    - type: accuracy
+      counters:
+          hit: l3_load_demand_hits
+          miss: l3_load_demand_misses
+      title: l3_lhr
+    - type: overhead
+      counters:
+          - l3_load_demand_hits
+          - l3_load_demand_misses
+      title: l3_lo
+    - type: count
+      counters:
+          - l3_demand_lines_allocated
+      title: l3_dla
+    - type: count
+      counters:
+          - l3_total_demand_lines_allocated
+      title: l3_tdla
+    - type: count
+      counters:
+          - l3_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      title: l3_labgabgalo
+    - type: count
+      counters:
+          - l3_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l3_labgabngalo
+    - type: count
+      counters:
+          - l3_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      title: l3_labngabgalo
+    - type: count
+      counters:
+          - l3_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      title: l3_labngabngalo
+    - type: count
+      counters:
+          - l3_gc_lines_accessed_by_gc
+      title: l3_glabg
+    - type: count
+      counters:
+          - l3_gc_lines_accessed_by_non_gc
+      title: l3_glabng
+    - type: count
+      counters:
+          - l3_non_gc_lines_accessed_by_gc
+      title: l3_nglabg
+    - type: count
+      counters:
+          - l3_non_gc_lines_accessed_by_non_gc
+      title: l3_nglabng
+    - type: accuracy
+      counters:
+          hit: l3_lines_allocated_by_gc_accessed_by_gc_at_least_once
+          miss: l3_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      title: l3_sl
+    - type: accuracy
+      counters:
+          hit: l3_gc_lines_accessed_by_gc
+          miss: l3_gc_lines_accessed_by_non_gc
+      title: l3_sla
+    - type: count
+      counters:
+          - l3_load_demand_misses
+      title: l3_ldm
+    - type: count
+      counters:
+          - l3_load_demand_hits
+      title: l3_ldh
+    - type: count
+      counters:
+          - l3_store_demand_misses
+      title: l3_sdm
+    - type: count
+      counters:
+          - l3_store_demand_hits
+      title: l3_sdh
+# ================================ DRAM Energy =============================== #
+    - type: count
+      counters:
+          - dram_total_energy
+      title: d_te
+    - type: overhead
+      counters:
+          - dram_cmd_energy
+      title: d_ceo
+    - type: count
+      counters:
+          - dram_cmd_energy
+      title: d_ce
+# ============================= DRAM Row Conflict ============================ #
+    - type: overhead
+      counters:
+          - dram_read_row_misses
+      title: d_rrm
+    - type: accuracy
+      counters:
+          hit: dram_read_row_hits
+          miss: dram_read_row_misses
+      title: d_rrh
+    - type: count
+      counters:
+          - dram_read_requests
+      title: d_rr
+    - type: count
+      counters:
+          - dram_read_requests
+          - dram_write_requests
+      title: d_tr
+    - type: count
+      counters:
+          - dram_controller_read_requests
+      title: d_crr
+    - type: count
+      counters:
+          - trace_parsed_lines
+      title: d_tpl
+    - type: count
+      counters:
+          - trace_total_lines
+      title: d_ttl
+    - type: count
+      counters:
+          - dram_forwarded_requests
+      title: d_fr
+# =========================== DRAM Request Rejects =========================== #
+    - type: count
+      counters:
+          - dram_write_buffer_full
+      title: d_wbf
+    - type: count
+      counters:
+          - dram_read_buffer_full
+      title: d_rbf
+    - type: count
+      counters:
+          - dram_write_buffer_full
+          - dram_read_buffer_full
+      title: d_bf
+    - type: count
+      counters:
+          - dram_cycles_skipped_due_to_retry
+      title: d_csdr
+    - type: count
+      counters:
+          - dram_cycles
+      title: d_cyc
+# ============================= DRAM Buffer Usage ============================ #
+    - type: count
+      counters:
+          - dram_scheduled_active
+      title: d_sca
+    - type: count
+      counters:
+          - dram_scheduled_rdwr
+      title: d_scrw
+# =========================== DRAM Command Counter =========================== #
+    - type: count
+      counters:
+          - dram_num_wr_commands
+      title: d_wr
+    - type: count
+      counters:
+          - dram_num_rd_commands
+      title: d_rd
+    - type: count
+      counters:
+          - dram_num_wr_commands
+          - dram_num_rd_commands
+      title: d_cmd
+    - type: count
+      counters:
+          - dram_num_act_commands
+      title: d_act
+    - type: count
+      counters:
+          - dram_num_pre_commands
+      title: d_pre
+# =============================== DRAM Latency =============================== #
+    - type: count
+      counters:
+          - dram_read_latency
+      title: d_lat
+    - type: count
+      counters:
+          - dram_total_read_latency
+      title: d_tlat
+    - type: count
+      counters:
+          - dram_arrive_to_scheduled_latency
+      title: d_atsl
+    - type: count
+      counters:
+          - dram_scheduled_to_depart_latency
+      title: d_stdl
+# =============================== DRAM Blocking ============================== #
+    - type: count
+      counters:
+          - dram_gc_blocking_non_gc_active
+      title: d_gbnga
+    - type: count
+      counters:
+          - dram_gc_blocking_non_gc_rdwr
+      title: d_gbngrw
+    - type: count
+      counters:
+          - dram_scheduled_rdwr
+      title: d_srw
+    - type: count
+      counters:
+          - dram_scheduled_active
+      title: d_sa
+    - type: count
+      counters:
+          - dram_gc_scheduled_rdwr
+      title: d_gsrw
+    - type: count
+      counters:
+          - dram_gc_scheduled_active
+      title: d_gsa
+# ================================ DRAM Queue ================================ #
+    - type: count
+      counters:
+          - dram_queue_len
+      title: d_ql

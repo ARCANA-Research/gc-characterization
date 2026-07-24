@@ -1,0 +1,9 @@
+---
+PERF:
+    counters:
+        - L2_LINES_OUT:USELESS_HWPF
+        - RAPL_ENERGY_PKG
+        - RAPL_ENERGY_DRAM
+    drop_concurrent:
+        - RAPL_ENERGY_PKG
+        - RAPL_ENERGY_DRAM

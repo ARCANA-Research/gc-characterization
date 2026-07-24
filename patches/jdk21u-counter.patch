@@ -1,0 +1,1186 @@
+diff --git a/make/autoconf/configure.ac b/make/autoconf/configure.ac
+index f7e9844a643..6e17ac6acf5 100644
+--- a/make/autoconf/configure.ac
++++ b/make/autoconf/configure.ac
+@@ -177,6 +177,9 @@ SRCDIRS_SETUP_IMPORT_MODULES
+ # See if we are doing a complete static build or not
+ JDKOPT_SETUP_STATIC_BUILD
+
++JDKOPT_SETUP_COUNTER
++JDKOPT_SETUP_FINER_COUNTER
++
+ # First determine the toolchain type (compiler family)
+ TOOLCHAIN_DETERMINE_TOOLCHAIN_TYPE
+
+diff --git a/make/autoconf/jdk-options.m4 b/make/autoconf/jdk-options.m4
+index 2cbdf74aef6..9ca6c04c25d 100644
+--- a/make/autoconf/jdk-options.m4
++++ b/make/autoconf/jdk-options.m4
+@@ -569,6 +569,26 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_STATIC_BUILD],
+   AC_SUBST(STATIC_BUILD)
+ ])
+
++################################################################################
++#
++# Enable counter events
++#
++AC_DEFUN_ONCE([JDKOPT_SETUP_COUNTER],
++[
++  UTIL_ARG_ENABLE(NAME: counter-events, DEFAULT: false, RESULT: COUNTER_EVENTS, DESC: [enable counter events])
++  AC_SUBST(COUNTER_EVENTS)
++])
++
++################################################################################
++#
++# Enable counter finer events
++#
++AC_DEFUN_ONCE([JDKOPT_SETUP_FINER_COUNTER],
++[
++  UTIL_ARG_ENABLE(NAME: counter-finer-events, DEFAULT: false, RESULT: COUNTER_FINER_EVENTS, DESC: [enable counter finer events])
++  AC_SUBST(COUNTER_FINER_EVENTS)
++])
++
+ ################################################################################
+ #
+ # jmod options.
+diff --git a/make/autoconf/jvm-features.m4 b/make/autoconf/jvm-features.m4
+index 28801984862..acef8a82cbc 100644
+--- a/make/autoconf/jvm-features.m4
++++ b/make/autoconf/jvm-features.m4
+@@ -47,6 +47,7 @@ m4_define(jvm_features_valid, m4_normalize( \
+     cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check \
+     jvmci jvmti link-time-opt management minimal opt-size parallelgc \
+     serialgc services shenandoahgc static-build vm-structs zero zgc \
++    counter-events counter-finer-events \
+ ))
+
+ # Deprecated JVM features (these are ignored, but with a warning)
+@@ -77,6 +78,8 @@ m4_define(jvm_feature_desc_static_build, [build static library instead of dynami
+ m4_define(jvm_feature_desc_vm_structs, [export JVM structures to the Serviceablility Agent])
+ m4_define(jvm_feature_desc_zero, [support building variant 'zero'])
+ m4_define(jvm_feature_desc_zgc, [include the Z garbage collector])
++m4_define(jvm_feature_desc_counter_events, [enable counter events])
++m4_define(jvm_feature_desc_counter_finer_events, [enable counter finer events])
+
+ ###############################################################################
+ # Parse command line options for JVM feature selection. After this function
+@@ -381,6 +384,50 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_ZGC],
+   ])
+ ])
+
++###############################################################################
++# Check if the feature 'counter-events' is available on this platform.
++#
++AC_DEFUN_ONCE([JVM_FEATURES_CHECK_COUNTER_EVENTS],
++[
++  JVM_FEATURES_CHECK_AVAILABILITY(counter-events, [
++    AC_MSG_CHECKING([if counter-events is enabled in configure])
++    if test "x$COUNTER_EVENTS" = "xtrue"; then
++      AC_MSG_CHECKING([if platform is supported for counter events])
++      if test "x$OPENJDK_TARGET_OS" = "xlinux"; then
++        AC_MSG_RESULT([yes])
++      else
++        AC_MSG_RESULT([no, $OPENJDK_TARGET_OS-$OPENJDK_TARGET_CPU])
++        AVAILABLE=false
++      fi
++    else
++      AC_MSG_RESULT([no, use --enable-counter-events to enable counter events])
++      AVAILABLE=false
++    fi
++  ])
++])
++
++###############################################################################
++# Check if the feature 'counter-finer-events' is available on this platform.
++#
++AC_DEFUN_ONCE([JVM_FEATURES_CHECK_COUNTER_FINER_EVENTS],
++[
++  JVM_FEATURES_CHECK_AVAILABILITY(counter-finer-events, [
++    AC_MSG_CHECKING([if counter-finer-events is enabled in configure])
++    if test "x$COUNTER_FINER_EVENTS" = "xtrue"; then
++      AC_MSG_CHECKING([if platform is supported for counter finer events])
++      if test "x$OPENJDK_TARGET_OS" = "xlinux"; then
++        AC_MSG_RESULT([yes])
++      else
++        AC_MSG_RESULT([no, $OPENJDK_TARGET_OS-$OPENJDK_TARGET_CPU])
++        AVAILABLE=false
++      fi
++    else
++      AC_MSG_RESULT([no, use --enable-counter-finer-events to enable counter finer events])
++      AVAILABLE=false
++    fi
++  ])
++])
++
+ ###############################################################################
+ # Setup JVM_FEATURES_PLATFORM_UNAVAILABLE and JVM_FEATURES_PLATFORM_FILTER
+ # to contain those features that are unavailable, or should be off by default,
+@@ -397,7 +444,9 @@ AC_DEFUN_ONCE([JVM_FEATURES_PREPARE_PLATFORM],
+   JVM_FEATURES_CHECK_SHENANDOAHGC
+   JVM_FEATURES_CHECK_STATIC_BUILD
+   JVM_FEATURES_CHECK_ZGC
+-
++  JVM_FEATURES_CHECK_COUNTER_EVENTS
++  JVM_FEATURES_CHECK_COUNTER_FINER_EVENTS
++
+ ])
+
+ ###############################################################################
+diff --git a/make/hotspot/lib/JvmFeatures.gmk b/make/hotspot/lib/JvmFeatures.gmk
+index cbe60fde205..a2b7ee1a347 100644
+--- a/make/hotspot/lib/JvmFeatures.gmk
++++ b/make/hotspot/lib/JvmFeatures.gmk
+@@ -163,6 +163,14 @@ ifneq ($(call check-jvm-feature, jfr), true)
+   JVM_EXCLUDE_FILES += compilerEvent.cpp
+ endif
+
++ifeq ($(call check-jvm-feature, counter-events), true)
++  JVM_CFLAGS_FEATURES += -DENABLE_COUNTER_EVENTS=1
++endif
++
++ifeq ($(call check-jvm-feature, counter-finer-events), true)
++  JVM_CFLAGS_FEATURES += -DENABLE_COUNTER_FINER_EVENTS=1
++endif
++
+ ################################################################################
+
+ ifeq ($(call check-jvm-feature, link-time-opt), true)
+diff --git a/src/hotspot/os/aix/os_aix.cpp b/src/hotspot/os/aix/os_aix.cpp
+index 0ecff8b28a6..fc6f270aef7 100644
+--- a/src/hotspot/os/aix/os_aix.cpp
++++ b/src/hotspot/os/aix/os_aix.cpp
+@@ -2437,7 +2437,7 @@ int os::active_processor_count() {
+   return online_cpus;
+ }
+
+-void os::set_native_thread_name(const char *name) {
++void os::set_native_thread_name(const char *name, bool is_gc_thread) {
+   // Not yet implemented.
+   return;
+ }
+diff --git a/src/hotspot/os/bsd/os_bsd.cpp b/src/hotspot/os/bsd/os_bsd.cpp
+index e04ae4924e2..8872be5a8b5 100644
+--- a/src/hotspot/os/bsd/os_bsd.cpp
++++ b/src/hotspot/os/bsd/os_bsd.cpp
+@@ -2092,7 +2092,7 @@ uint os::processor_id() {
+ #endif
+ }
+
+-void os::set_native_thread_name(const char *name) {
++void os::set_native_thread_name(const char *name, bool is_gc_thread) {
+ #if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_5
+   // This is only supported in Snow Leopard and beyond
+   if (name != nullptr) {
+diff --git a/src/hotspot/os/linux/os_linux.cpp b/src/hotspot/os/linux/os_linux.cpp
+index 7cb862d7c3e..bd5aa67bc7c 100644
+--- a/src/hotspot/os/linux/os_linux.cpp
++++ b/src/hotspot/os/linux/os_linux.cpp
+@@ -129,6 +129,9 @@
+   #include <sched.h>
+ #endif
+
++#include "gc/shared/gc_globals.hpp"
++#include "prims/jvmtiExport.hpp"
++
+ // if RUSAGE_THREAD for getrusage() has not been defined, do it here. The code calling
+ // getrusage() is prepared to handle the associated failure.
+ #ifndef RUSAGE_THREAD
+@@ -781,7 +784,6 @@ static void *thread_native_entry(Thread *thread) {
+     os::current_thread_id(), (uintx) pthread_self());
+
+   assert(osthread->pthread_id() != 0, "pthread_id was not set as expected");
+-
+   if (DelayThreadStartALot) {
+     os::naked_short_sleep(100);
+   }
+@@ -975,6 +977,26 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
+     pthread_t tid;
+     int ret = 0;
+     int limit = 3;
++
++#if ENABLE_COUNTER_EVENTS
++    thread->set_is_gc_thread(thr_type == os::gc_thread);
++    if (thr_type == os::gc_thread && EnableGCAffinity) {
++      cpu_set_t gc_cpu_affinity;
++      CPU_ZERO(&gc_cpu_affinity);
++      gc_cpu_affinity.__bits[0] = GCAffinityMask;
++      ret = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &gc_cpu_affinity);
++      assert(ret == 0);
++      log_info(os, thread)("GC thread \"%s\" affinity set to %lu", thread->name(), *(gc_cpu_affinity.__bits));
++    } else if (EnableJDKAffinity) {
++      cpu_set_t jdk_cpu_affinity;
++      CPU_ZERO(&jdk_cpu_affinity);
++      jdk_cpu_affinity.__bits[0] = JDKAffinityMask;
++      ret = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &jdk_cpu_affinity);
++      assert(ret == 0);
++      log_info(os, thread)("Thread \"%s\" affinity set to %lu", thread->name(), *(jdk_cpu_affinity.__bits));
++    }
++#endif
++
+     do {
+       ret = pthread_create(&tid, &attr, (void* (*)(void*)) thread_native_entry, thread);
+     } while (ret == EAGAIN && limit-- > 0);
+@@ -983,7 +1005,6 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
+     if (ret == 0) {
+       log_info(os, thread)("Thread \"%s\" started (pthread id: " UINTX_FORMAT ", attributes: %s). ",
+                            thread->name(), (uintx) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
+-
+       // Print current timer slack if override is enabled and timer slack value is available.
+       // Avoid calling prctl otherwise for extra safety.
+       if (TimerSlack >= 0) {
+@@ -4951,10 +4972,20 @@ uint os::processor_id() {
+   return 0;
+ }
+
+-void os::set_native_thread_name(const char *name) {
++void os::set_native_thread_name(const char *name, bool is_gc_thread) {
+   if (Linux::_pthread_setname_np) {
+     char buf [16]; // according to glibc manpage, 16 chars incl. '/0'
+-    snprintf(buf, sizeof(buf), "%s", name);
++#if ENABLE_COUNTER_EVENTS
++    if (is_gc_thread == true) {
++      snprintf(buf, sizeof(buf), "%s", "GC:");
++      snprintf(buf + 3, sizeof(buf) - 3, "%s", name);
++    } else {
++#endif
++      snprintf(buf, sizeof(buf), "%s", name);
++#if ENABLE_COUNTER_EVENTS
++    }
++#endif
++    // snprintf(buf, sizeof(buf), "%s", name);
+     buf[sizeof(buf) - 1] = '\0';
+     const int rc = Linux::_pthread_setname_np(pthread_self(), buf);
+     // ERANGE should not happen; all other errors should just be ignored.
+diff --git a/src/hotspot/os/windows/os_windows.cpp b/src/hotspot/os/windows/os_windows.cpp
+index e1484098440..ade0f70b37e 100644
+--- a/src/hotspot/os/windows/os_windows.cpp
++++ b/src/hotspot/os/windows/os_windows.cpp
+@@ -1005,7 +1005,7 @@ DEBUG_ONLY(static GetThreadDescriptionFnPtr _GetThreadDescription = nullptr;)
+ // forward decl.
+ static errno_t convert_to_unicode(char const* char_path, LPWSTR* unicode_path);
+
+-void os::set_native_thread_name(const char *name) {
++void os::set_native_thread_name(const char *name, bool is_gc_thread) {
+
+   // From Windows 10 and Windows 2016 server, we have a direct API
+   // for setting the thread name/description:
+diff --git a/src/hotspot/share/gc/g1/g1CollectedHeap.cpp b/src/hotspot/share/gc/g1/g1CollectedHeap.cpp
+index 9b6b22a29e7..d7aed31e37f 100644
+--- a/src/hotspot/share/gc/g1/g1CollectedHeap.cpp
++++ b/src/hotspot/share/gc/g1/g1CollectedHeap.cpp
+@@ -104,6 +104,7 @@
+ #include "oops/access.inline.hpp"
+ #include "oops/compressedOops.inline.hpp"
+ #include "oops/oop.inline.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "runtime/atomic.hpp"
+ #include "runtime/handles.inline.hpp"
+ #include "runtime/init.hpp"
+@@ -921,6 +922,12 @@ bool G1CollectedHeap::do_full_collection(bool clear_all_soft_refs,
+   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
+       soft_ref_policy()->should_clear_all_soft_refs();
+
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++  if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(8);
++  }
++#endif
++
+   G1FullGCMark gc_mark;
+   GCTraceTime(Info, gc) tm("Pause Full", nullptr, gc_cause(), true);
+   G1FullCollector collector(this, do_clear_all_soft_refs, do_maximal_compaction, gc_mark.tracer());
+diff --git a/src/hotspot/share/gc/g1/g1VMOperations.cpp b/src/hotspot/share/gc/g1/g1VMOperations.cpp
+index bdee54c8ac3..bce975a3e2a 100644
+--- a/src/hotspot/share/gc/g1/g1VMOperations.cpp
++++ b/src/hotspot/share/gc/g1/g1VMOperations.cpp
+@@ -35,6 +35,7 @@
+ #include "gc/shared/gcTraceTime.inline.hpp"
+ #include "gc/shared/isGCActiveMark.hpp"
+ #include "memory/universe.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "runtime/interfaceSupport.inline.hpp"
+
+ bool VM_G1CollectFull::skip_operation() const {
+@@ -168,6 +169,11 @@ void VM_G1PauseConcurrent::doit() {
+
+   G1ConcGCMonitoringScope monitoring_scope(g1h->monitoring_support());
+   SvcGCMarker sgcm(SvcGCMarker::CONCURRENT);
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++  if (JvmtiExport::should_post_counter_gc_event()) {
++    JvmtiExport::post_counter_gc_event(_counter_event_id);
++}
++#endif
+   IsSTWGCActiveMark x;
+
+   work();
+diff --git a/src/hotspot/share/gc/g1/g1VMOperations.hpp b/src/hotspot/share/gc/g1/g1VMOperations.hpp
+index cfca9e21d07..6662829ffb3 100644
+--- a/src/hotspot/share/gc/g1/g1VMOperations.hpp
++++ b/src/hotspot/share/gc/g1/g1VMOperations.hpp
+@@ -83,10 +83,10 @@ public:
+ class VM_G1PauseConcurrent : public VM_Operation {
+   uint         _gc_id;
+   const char*  _message;
+-
++  int          _counter_event_id;
+ protected:
+-  VM_G1PauseConcurrent(const char* message) :
+-    _gc_id(GCId::current()), _message(message) { }
++  VM_G1PauseConcurrent(const char* message, int counter_event_id) :
++    _gc_id(GCId::current()), _message(message), _counter_event_id(counter_event_id) { }
+   virtual void work() = 0;
+
+ public:
+@@ -97,14 +97,14 @@ public:
+
+ class VM_G1PauseRemark : public VM_G1PauseConcurrent {
+ public:
+-  VM_G1PauseRemark() : VM_G1PauseConcurrent("Pause Remark") { }
++  VM_G1PauseRemark() : VM_G1PauseConcurrent("Pause Remark", 9) { }
+   VMOp_Type type() const override { return VMOp_G1PauseRemark; }
+   void work() override;
+ };
+
+ class VM_G1PauseCleanup : public VM_G1PauseConcurrent {
+ public:
+-  VM_G1PauseCleanup() : VM_G1PauseConcurrent("Pause Cleanup") { }
++  VM_G1PauseCleanup() : VM_G1PauseConcurrent("Pause Cleanup", 10) { }
+   VMOp_Type type() const override { return VMOp_G1PauseCleanup; }
+   void work() override;
+ };
+diff --git a/src/hotspot/share/gc/g1/g1YoungCollector.cpp b/src/hotspot/share/gc/g1/g1YoungCollector.cpp
+index aac7aced7b4..7f612b14da7 100644
+--- a/src/hotspot/share/gc/g1/g1YoungCollector.cpp
++++ b/src/hotspot/share/gc/g1/g1YoungCollector.cpp
+@@ -57,6 +57,7 @@
+ #include "gc/shared/workerThread.hpp"
+ #include "jfr/jfrEvents.hpp"
+ #include "memory/resourceArea.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "runtime/threads.hpp"
+ #include "utilities/ticks.hpp"
+
+@@ -65,6 +66,16 @@
+ // The code relies on the fact that GCTraceTimeWrapper stores the string passed
+ // initially as a reference only, so that we can modify it as needed.
+ class G1YoungGCTraceTime {
++  class CounterSignalClass {
++    public:
++      CounterSignalClass(int counter_event_id) {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++        if (JvmtiExport::should_post_counter_gc_event()) {
++          JvmtiExport::post_counter_gc_event(counter_event_id);
++        }
++#endif
++      }
++  };
+   G1YoungCollector* _collector;
+
+   G1GCPauseType _pause_type;
+@@ -73,6 +84,8 @@ class G1YoungGCTraceTime {
+   static const uint MaxYoungGCNameLength = 128;
+   char _young_gc_name_data[MaxYoungGCNameLength];
+
++  CounterSignalClass _counter_signal; // Counter signals
++
+   GCTraceTime(Info, gc) _tt;
+
+   const char* update_young_gc_name() {
+@@ -93,6 +106,7 @@ public:
+     // does not matter here.
+     _pause_type(_collector->collector_state()->young_gc_pause_type(false /* concurrent_operation_is_full_mark */)),
+     _pause_cause(cause),
++    _counter_signal(7),
+     // Fake a "no cause" and manually add the correct string in update_young_gc_name()
+     // to make the string look more natural.
+     _tt(update_young_gc_name(), nullptr, GCCause::_no_gc, true) {
+diff --git a/src/hotspot/share/gc/parallel/psVMOperations.cpp b/src/hotspot/share/gc/parallel/psVMOperations.cpp
+index 47eeffb34a5..2311cc12f86 100644
+--- a/src/hotspot/share/gc/parallel/psVMOperations.cpp
++++ b/src/hotspot/share/gc/parallel/psVMOperations.cpp
+@@ -27,6 +27,7 @@
+ #include "gc/parallel/psScavenge.hpp"
+ #include "gc/parallel/psVMOperations.hpp"
+ #include "gc/shared/gcLocker.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "utilities/dtrace.hpp"
+
+ // The following methods are used by the parallel scavenge collector
+@@ -38,6 +39,11 @@ VM_ParallelGCFailedAllocation::VM_ParallelGCFailedAllocation(size_t word_size,
+
+ void VM_ParallelGCFailedAllocation::doit() {
+   SvcGCMarker sgcm(SvcGCMarker::MINOR);
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++  if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(5);
++  }
++#endif
+
+   ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
+
+@@ -65,6 +71,11 @@ VM_ParallelGCSystemGC::VM_ParallelGCSystemGC(uint gc_count,
+
+ void VM_ParallelGCSystemGC::doit() {
+   SvcGCMarker sgcm(SvcGCMarker::FULL);
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++  if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(6);
++  }
++#endif
+
+   ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
+
+diff --git a/src/hotspot/share/gc/shared/gc_globals.hpp b/src/hotspot/share/gc/shared/gc_globals.hpp
+index 5d720268540..2fba3e9dda5 100644
+--- a/src/hotspot/share/gc/shared/gc_globals.hpp
++++ b/src/hotspot/share/gc/shared/gc_globals.hpp
+@@ -690,7 +690,21 @@
+   product(uint, GCCardSizeInBytes, 512,                                     \
+           "Card table entry size (in bytes) for card based collectors")     \
+           range(128, NOT_LP64(512) LP64_ONLY(1024))                         \
+-          constraint(GCCardSizeInBytesConstraintFunc,AtParse)
++          constraint(GCCardSizeInBytesConstraintFunc,AtParse)               \
++                                                                            \
++  product(bool, EnableGCAffinity, false, EXPERIMENTAL,                      \
++          "Enable GC CPU affinity functionality")                           \
++                                                                            \
++  product(uint64_t, GCAffinityMask, 0, EXPERIMENTAL,                        \
++          "Mask for GC thread CPU affinity")                                \
++          range(0, 281474976710655)                                         \
++                                                                            \
++  product(bool, EnableJDKAffinity, false, EXPERIMENTAL,                     \
++          "Enable JDK CPU affinity functionality")                          \
++                                                                            \
++  product(uint64_t, JDKAffinityMask, 0, EXPERIMENTAL,                       \
++          "Mask for JDK thread CPU affinity")                               \
++          range(0, 281474976710655)
+   // end of GC_FLAGS
+
+ DECLARE_FLAGS(GC_FLAGS)
+diff --git a/src/hotspot/share/gc/shared/genCollectedHeap.cpp b/src/hotspot/share/gc/shared/genCollectedHeap.cpp
+index fd61c4b45da..e9a768daa8a 100644
+--- a/src/hotspot/share/gc/shared/genCollectedHeap.cpp
++++ b/src/hotspot/share/gc/shared/genCollectedHeap.cpp
+@@ -65,6 +65,7 @@
+ #include "memory/resourceArea.hpp"
+ #include "memory/universe.hpp"
+ #include "oops/oop.inline.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "runtime/handles.hpp"
+ #include "runtime/handles.inline.hpp"
+ #include "runtime/java.hpp"
+@@ -481,6 +482,11 @@ void GenCollectedHeap::do_collection(bool           full,
+   bool do_full_collection = false;
+
+   if (do_young_collection) {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++        JvmtiExport::post_counter_gc_event(3);
++    }
++#endif
+     GCIdMark gc_id_mark;
+     GCTraceCPUTime tcpu(((DefNewGeneration*)_young_gen)->gc_tracer());
+     GCTraceTime(Info, gc) t("Pause Young", nullptr, gc_cause(), true);
+@@ -531,6 +537,11 @@ void GenCollectedHeap::do_collection(bool           full,
+   }
+
+   if (do_full_collection) {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++        JvmtiExport::post_counter_gc_event(4);
++    }
++#endif
+     GCIdMark gc_id_mark;
+     GCTraceCPUTime tcpu(GenMarkSweep::gc_tracer());
+     GCTraceTime(Info, gc) t("Pause Full", nullptr, gc_cause(), true);
+diff --git a/src/hotspot/share/gc/shenandoah/shenandoahConcurrentGC.cpp b/src/hotspot/share/gc/shenandoah/shenandoahConcurrentGC.cpp
+index ec25cdf2a09..1f9eb5fc6d0 100644
+--- a/src/hotspot/share/gc/shenandoah/shenandoahConcurrentGC.cpp
++++ b/src/hotspot/share/gc/shenandoah/shenandoahConcurrentGC.cpp
+@@ -237,7 +237,7 @@ void ShenandoahConcurrentGC::vmop_entry_final_roots() {
+
+ void ShenandoahConcurrentGC::entry_init_mark() {
+   const char* msg = init_mark_event_message();
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::init_mark);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::init_mark, 11);
+   EventMark em("%s", msg);
+
+   ShenandoahWorkerScope scope(ShenandoahHeap::heap()->workers(),
+@@ -249,7 +249,7 @@ void ShenandoahConcurrentGC::entry_init_mark() {
+
+ void ShenandoahConcurrentGC::entry_final_mark() {
+   const char* msg = final_mark_event_message();
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_mark);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_mark, 12);
+   EventMark em("%s", msg);
+
+   ShenandoahWorkerScope scope(ShenandoahHeap::heap()->workers(),
+@@ -261,7 +261,7 @@ void ShenandoahConcurrentGC::entry_final_mark() {
+
+ void ShenandoahConcurrentGC::entry_init_updaterefs() {
+   static const char* msg = "Pause Init Update Refs";
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::init_update_refs);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::init_update_refs, 13);
+   EventMark em("%s", msg);
+
+   // No workers used in this phase, no setup required
+@@ -270,7 +270,7 @@ void ShenandoahConcurrentGC::entry_init_updaterefs() {
+
+ void ShenandoahConcurrentGC::entry_final_updaterefs() {
+   static const char* msg = "Pause Final Update Refs";
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_update_refs);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_update_refs, 14);
+   EventMark em("%s", msg);
+
+   ShenandoahWorkerScope scope(ShenandoahHeap::heap()->workers(),
+@@ -282,7 +282,7 @@ void ShenandoahConcurrentGC::entry_final_updaterefs() {
+
+ void ShenandoahConcurrentGC::entry_final_roots() {
+   static const char* msg = "Pause Final Roots";
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_roots);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::final_roots, 15);
+   EventMark em("%s", msg);
+
+   op_final_roots();
+diff --git a/src/hotspot/share/gc/shenandoah/shenandoahDegeneratedGC.cpp b/src/hotspot/share/gc/shenandoah/shenandoahDegeneratedGC.cpp
+index e7cf402a527..7daf8b82501 100644
+--- a/src/hotspot/share/gc/shenandoah/shenandoahDegeneratedGC.cpp
++++ b/src/hotspot/share/gc/shenandoah/shenandoahDegeneratedGC.cpp
+@@ -61,7 +61,7 @@ void ShenandoahDegenGC::vmop_degenerated() {
+
+ void ShenandoahDegenGC::entry_degenerated() {
+   const char* msg = degen_event_message(_degen_point);
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::degen_gc, true /* log_heap_usage */);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::degen_gc, 16, true /* log_heap_usage */);
+   EventMark em("%s", msg);
+   ShenandoahHeap* const heap = ShenandoahHeap::heap();
+
+diff --git a/src/hotspot/share/gc/shenandoah/shenandoahFullGC.cpp b/src/hotspot/share/gc/shenandoah/shenandoahFullGC.cpp
+index 07f62d56ad2..67384ad7cb4 100644
+--- a/src/hotspot/share/gc/shenandoah/shenandoahFullGC.cpp
++++ b/src/hotspot/share/gc/shenandoah/shenandoahFullGC.cpp
+@@ -88,7 +88,7 @@ void ShenandoahFullGC::vmop_entry_full(GCCause::Cause cause) {
+
+ void ShenandoahFullGC::entry_full(GCCause::Cause cause) {
+   static const char* msg = "Pause Full";
+-  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::full_gc, true /* log_heap_usage */);
++  ShenandoahPausePhase gc_phase(msg, ShenandoahPhaseTimings::full_gc, 17, true /* log_heap_usage */);
+   EventMark em("%s", msg);
+
+   ShenandoahWorkerScope scope(ShenandoahHeap::heap()->workers(),
+diff --git a/src/hotspot/share/gc/shenandoah/shenandoahUtils.cpp b/src/hotspot/share/gc/shenandoah/shenandoahUtils.cpp
+index 711d906ec7c..70d06f8f6f1 100644
+--- a/src/hotspot/share/gc/shenandoah/shenandoahUtils.cpp
++++ b/src/hotspot/share/gc/shenandoah/shenandoahUtils.cpp
+@@ -34,6 +34,7 @@
+ #include "gc/shenandoah/shenandoahHeap.inline.hpp"
+ #include "gc/shenandoah/shenandoahReferenceProcessor.hpp"
+ #include "gc/shenandoah/shenandoahUtils.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "utilities/debug.hpp"
+
+ ShenandoahPhaseTimings::Phase ShenandoahTimingsTracker::_current_phase = ShenandoahPhaseTimings::_invalid_phase;
+@@ -89,8 +90,9 @@ ShenandoahGCPauseMark::ShenandoahGCPauseMark(uint gc_id, const char* notificatio
+   );
+ }
+
+-ShenandoahPausePhase::ShenandoahPausePhase(const char* title, ShenandoahPhaseTimings::Phase phase, bool log_heap_usage) :
++ShenandoahPausePhase::ShenandoahPausePhase(const char* title, ShenandoahPhaseTimings::Phase phase, int counter_event_id, bool log_heap_usage) :
+   ShenandoahTimingsTracker(phase),
++  _counter_signal(counter_event_id),
+   _tracer(title, nullptr, GCCause::_no_gc, log_heap_usage),
+   _timer(ShenandoahHeap::heap()->gc_timer()) {
+   _timer->register_gc_pause_start(title);
+diff --git a/src/hotspot/share/gc/shenandoah/shenandoahUtils.hpp b/src/hotspot/share/gc/shenandoah/shenandoahUtils.hpp
+index 15f0ee61407..1578cf36f56 100644
+--- a/src/hotspot/share/gc/shenandoah/shenandoahUtils.hpp
++++ b/src/hotspot/share/gc/shenandoah/shenandoahUtils.hpp
+@@ -81,12 +81,24 @@ public:
+  * a corresponding JFR event
+  */
+ class ShenandoahPausePhase : public ShenandoahTimingsTracker {
++  class CounterSignalClass {
++    public:
++      CounterSignalClass(int counter_event_id) {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++        if (JvmtiExport::should_post_counter_gc_event()) {
++          JvmtiExport::post_counter_gc_event(counter_event_id);
++        }
++#endif
++      }
++  };
++
+ private:
++  CounterSignalClass _counter_signal; // Counter signals
+   GCTraceTimeWrapper<LogLevel::Info, LOG_TAGS(gc)> _tracer;
+   ConcurrentGCTimer* const _timer;
+
+ public:
+-  ShenandoahPausePhase(const char* title, ShenandoahPhaseTimings::Phase phase, bool log_heap_usage = false);
++  ShenandoahPausePhase(const char* title, ShenandoahPhaseTimings::Phase phase, int counter_event_id, bool log_heap_usage = false);
+   ~ShenandoahPausePhase();
+ };
+
+diff --git a/src/hotspot/share/gc/x/xDriver.cpp b/src/hotspot/share/gc/x/xDriver.cpp
+index 3e6fd03134e..75a19f3f3aa 100644
+--- a/src/hotspot/share/gc/x/xDriver.cpp
++++ b/src/hotspot/share/gc/x/xDriver.cpp
+@@ -38,6 +38,7 @@
+ #include "interpreter/oopMapCache.hpp"
+ #include "logging/log.hpp"
+ #include "memory/universe.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "runtime/threads.hpp"
+ #include "runtime/vmOperations.hpp"
+ #include "runtime/vmThread.hpp"
+@@ -157,6 +158,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(18);
++    }
++#endif
+     XStatTimer timer(XPhasePauseMarkStart);
+     XServiceabilityPauseTracer tracer;
+
+@@ -174,6 +180,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(19);
++    }
++#endif
+     XStatTimer timer(XPhasePauseMarkEnd);
+     XServiceabilityPauseTracer tracer;
+     return XHeap::heap()->mark_end();
+@@ -191,6 +202,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(20);
++    }
++#endif
+     XStatTimer timer(XPhasePauseRelocateStart);
+     XServiceabilityPauseTracer tracer;
+     XHeap::heap()->relocate_start();
+diff --git a/src/hotspot/share/gc/z/zGeneration.cpp b/src/hotspot/share/gc/z/zGeneration.cpp
+index a8114bce71a..32b5d6637c3 100644
+--- a/src/hotspot/share/gc/z/zGeneration.cpp
++++ b/src/hotspot/share/gc/z/zGeneration.cpp
+@@ -55,6 +55,7 @@
+ #include "interpreter/oopMapCache.hpp"
+ #include "logging/log.hpp"
+ #include "memory/universe.hpp"
++#include "prims/jvmtiExport.hpp"
+ #include "prims/jvmtiTagMap.hpp"
+ #include "runtime/atomic.hpp"
+ #include "runtime/continuation.hpp"
+@@ -586,6 +587,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(24);
++    }
++#endif
+     ZStatTimerYoung timer(ZPhasePauseMarkStartYoungAndOld);
+     ZServiceabilityPauseTracer tracer;
+
+@@ -623,6 +629,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(21);
++    }
++#endif
+     ZStatTimerYoung timer(ZPhasePauseMarkStartYoung);
+     ZServiceabilityPauseTracer tracer;
+
+@@ -667,6 +678,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(22);
++    }
++#endif
+     ZStatTimerYoung timer(ZPhasePauseMarkEndYoung);
+     ZServiceabilityPauseTracer tracer;
+
+@@ -831,6 +847,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(23);
++    }
++#endif
+     ZStatTimerYoung timer(ZPhasePauseRelocateStartYoung);
+     ZServiceabilityPauseTracer tracer;
+
+@@ -1090,6 +1111,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(25);
++    }
++#endif
+     ZStatTimerOld timer(ZPhasePauseMarkEndOld);
+     ZServiceabilityPauseTracer tracer;
+
+@@ -1175,6 +1201,11 @@ public:
+   }
+
+   virtual bool do_operation() {
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++    if (JvmtiExport::should_post_counter_gc_event()) {
++      JvmtiExport::post_counter_gc_event(26);
++    }
++#endif
+     ZStatTimerOld timer(ZPhasePauseRelocateStartOld);
+     ZServiceabilityPauseTracer tracer;
+
+diff --git a/src/hotspot/share/prims/jvm.cpp b/src/hotspot/share/prims/jvm.cpp
+index 7852f37d4be..8f3e6a79c7a 100644
+--- a/src/hotspot/share/prims/jvm.cpp
++++ b/src/hotspot/share/prims/jvm.cpp
+@@ -3146,7 +3146,7 @@ JVM_ENTRY(void, JVM_SetNativeThreadName(JNIEnv* env, jobject jthread, jstring na
+     // on other programs.
+     ResourceMark rm(thread);
+     const char *thread_name = java_lang_String::as_utf8_string(JNIHandles::resolve_non_null(name));
+-    os::set_native_thread_name(thread_name);
++    os::set_native_thread_name(thread_name, false);
+   }
+ JVM_END
+
+diff --git a/src/hotspot/share/prims/jvmti.xml b/src/hotspot/share/prims/jvmti.xml
+index d462d4bd1eb..5eccc272a50 100644
+--- a/src/hotspot/share/prims/jvmti.xml
++++ b/src/hotspot/share/prims/jvmti.xml
+@@ -10571,6 +10571,13 @@ myInit() {
+           Can generate events when garbage collection begins or ends
+         </description>
+       </capabilityfield>
++      <capabilityfield id="can_generate_counter_events"
++                       disp1="can_generate" disp2="_counter_events"
++                       >
++        <description>
++          Can generate events specific to Counter
++        </description>
++      </capabilityfield>
+       <capabilityfield id="can_generate_object_free_events"
+                        disp1="can_generate" disp2="_object_free_events"
+                        >
+@@ -14198,7 +14205,72 @@ myInit() {
+     <parameters>
+     </parameters>
+   </event>
+-
++  <event label="Counter Thread Start"
++         id="CounterThreadStart" const="JVMTI_EVENT_COUNTER_THREAD_START" num="92">
++    <description>
++      Please check Counter manual.
++    </description>
++    <origin>new</origin>
++    <capabilities>
++      <required id="can_generate_counter_events"></required>
++    </capabilities>
++    <parameters>
++      <param id="tid">
++        <jlong/>
++        <description>
++          Thread id
++        </description>
++      </param>
++      <param id="isGC">
++        <jboolean/>
++        <description>
++          Is true if it's a GC thread
++        </description>
++      </param>
++    </parameters>
++  </event>
++  <event label="Counter Thread End"
++         id="CounterThreadEnd" const="JVMTI_EVENT_COUNTER_THREAD_END" num="93">
++    <description>
++      Please check Counter manual.
++    </description>
++    <origin>new</origin>
++    <capabilities>
++      <required id="can_generate_counter_events"></required>
++    </capabilities>
++    <parameters>
++      <param id="tid">
++        <jlong/>
++        <description>
++          Thread id
++        </description>
++      </param>
++      <param id="isGC">
++        <jboolean/>
++        <description>
++          Is true if it's a GC thread
++        </description>
++      </param>
++    </parameters>
++  </event>
++  <event label="Counter GC Event"
++         id="CounterGcEvent" const="JVMTI_EVENT_COUNTER_GC_EVENT" num="94">
++    <description>
++      Please check Counter manual.
++    </description>
++    <origin>new</origin>
++    <capabilities>
++      <required id="can_generate_counter_events"></required>
++    </capabilities>
++    <parameters>
++      <param id="event_id">
++        <jint/>
++        <description>
++          Event id
++        </description>
++      </param>
++    </parameters>
++  </event>
+   <elide>
+   <event label="Verbose Output" phase="any"
+          id="VerboseOutput" const="JVMTI_EVENT_VERBOSE_OUTPUT" num="85">
+@@ -14239,7 +14311,6 @@ myInit() {
+     </parameters>
+   </event>
+   </elide>
+-
+ </eventsection>
+
+ <datasection>
+diff --git a/src/hotspot/share/prims/jvmtiEventController.cpp b/src/hotspot/share/prims/jvmtiEventController.cpp
+index 0a01c3263e1..ae1f3bd6ec1 100644
+--- a/src/hotspot/share/prims/jvmtiEventController.cpp
++++ b/src/hotspot/share/prims/jvmtiEventController.cpp
+@@ -92,6 +92,9 @@ static const jlong  VM_OBJECT_ALLOC_BIT = (((jlong)1) << (JVMTI_EVENT_VM_OBJECT_
+ static const jlong  SAMPLED_OBJECT_ALLOC_BIT = (((jlong)1) << (JVMTI_EVENT_SAMPLED_OBJECT_ALLOC - TOTAL_MIN_EVENT_TYPE_VAL));
+ static const jlong  VTHREAD_START_BIT = (((jlong)1) << (JVMTI_EVENT_VIRTUAL_THREAD_START - TOTAL_MIN_EVENT_TYPE_VAL));
+ static const jlong  VTHREAD_END_BIT = (((jlong)1) << (JVMTI_EVENT_VIRTUAL_THREAD_END - TOTAL_MIN_EVENT_TYPE_VAL));
++static const jlong  COUNTER_THREAD_START_BIT = (((jlong)1) << (JVMTI_EVENT_COUNTER_THREAD_START - TOTAL_MIN_EVENT_TYPE_VAL));
++static const jlong  COUNTER_THREAD_END_BIT = (((jlong)1) << (JVMTI_EVENT_COUNTER_THREAD_END - TOTAL_MIN_EVENT_TYPE_VAL));
++static const jlong  COUNTER_GC_EVENT_BIT = (((jlong)1) << (JVMTI_EVENT_COUNTER_GC_EVENT - TOTAL_MIN_EVENT_TYPE_VAL));
+
+ // bits for extension events
+ static const jlong  CLASS_UNLOAD_BIT = (((jlong)1) << (EXT_EVENT_CLASS_UNLOAD - TOTAL_MIN_EVENT_TYPE_VAL));
+@@ -699,7 +702,11 @@ JvmtiEventControllerPrivate::recompute_enabled() {
+     JvmtiExport::set_should_post_vthread_end((any_env_thread_enabled & VTHREAD_END_BIT) != 0);
+     JvmtiExport::set_should_post_vthread_mount((any_env_thread_enabled & VTHREAD_MOUNT_BIT) != 0);
+     JvmtiExport::set_should_post_vthread_unmount((any_env_thread_enabled & VTHREAD_UNMOUNT_BIT) != 0);
+-
++    JvmtiExport::set_should_post_counter_thread_start((any_env_thread_enabled & COUNTER_THREAD_START_BIT) != 0);
++    JvmtiExport::set_should_post_counter_thread_end((any_env_thread_enabled & COUNTER_THREAD_END_BIT) != 0);
++#if ENABLE_COUNTER_FINER_EVENTS
++    JvmtiExport::set_should_post_counter_gc_event((any_env_thread_enabled & COUNTER_GC_EVENT_BIT) != 0);
++#endif
+     // need this if we want thread events or we need them to init data
+     JvmtiExport::set_should_post_thread_life((any_env_thread_enabled & NEED_THREAD_LIFE_EVENTS) != 0);
+
+diff --git a/src/hotspot/share/prims/jvmtiExport.cpp b/src/hotspot/share/prims/jvmtiExport.cpp
+index a11f56f23ff..4b1cb260233 100644
+--- a/src/hotspot/share/prims/jvmtiExport.cpp
++++ b/src/hotspot/share/prims/jvmtiExport.cpp
+@@ -1305,6 +1305,11 @@ bool              JvmtiExport::_should_post_vthread_start                 = fals
+ bool              JvmtiExport::_should_post_vthread_end                   = false;
+ bool              JvmtiExport::_should_post_vthread_mount                 = false;
+ bool              JvmtiExport::_should_post_vthread_unmount               = false;
++bool              JvmtiExport::_should_post_counter_thread_start            = false;
++bool              JvmtiExport::_should_post_counter_thread_end              = false;
++#if ENABLE_COUNTER_FINER_EVENTS
++bool              JvmtiExport::_should_post_counter_gc_event                = false;
++#endif
+
+ ////////////////////////////////////////////////////////////////////////////////////////////////
+
+@@ -2664,6 +2669,51 @@ void JvmtiExport::record_sampled_internal_object_allocation(oop obj) {
+   }
+ }
+
++void JvmtiExport::post_counter_thread_start(jlong thread_id, jboolean is_gc) {
++  Thread* thread = Thread::current();
++  JvmtiEnvIterator it;
++  for (JvmtiEnv* env = it.first(); env != nullptr; env = it.next(env)) {
++    if (env->is_enabled(JVMTI_EVENT_COUNTER_THREAD_START)) {
++      JvmtiThreadEventTransition jet(thread);
++      jvmtiEventCounterThreadStart callback = env->callbacks()->CounterThreadStart;
++      if (callback != nullptr) {
++        (*callback)(env->jvmti_external(), thread_id, is_gc);
++      }
++    }
++  }
++}
++
++void JvmtiExport::post_counter_thread_end(jlong thread_id, jboolean is_gc) {
++  Thread* thread = Thread::current();
++  JvmtiEnvIterator it;
++  for (JvmtiEnv* env = it.first(); env != nullptr; env = it.next(env)) {
++    if (env->is_enabled(JVMTI_EVENT_COUNTER_THREAD_END)) {
++      JvmtiThreadEventTransition jet(thread);
++      jvmtiEventCounterThreadEnd callback = env->callbacks()->CounterThreadEnd;
++      if (callback != nullptr) {
++        (*callback)(env->jvmti_external(), thread_id, is_gc);
++      }
++    }
++  }
++}
++
++#if ENABLE_COUNTER_FINER_EVENTS
++void JvmtiExport::post_counter_gc_event(jint event_id) {
++  Thread *thread = Thread::current(); // this event is posted from VM-Thread.
++  JvmtiEnvIterator it;
++  for (JvmtiEnv* env = it.first(); env != nullptr; env = it.next(env)) {
++    if (env->is_enabled(JVMTI_EVENT_COUNTER_GC_EVENT)) {
++      JvmtiThreadEventTransition jet(thread);
++      // JNIEnv is null here because this event is posted from VM Thread
++      jvmtiEventCounterGcEvent callback = env->callbacks()->CounterGcEvent;
++      if (callback != nullptr) {
++        (*callback)(env->jvmti_external(), event_id);
++      }
++    }
++  }
++}
++#endif
++
+ void JvmtiExport::post_garbage_collection_finish() {
+   Thread *thread = Thread::current(); // this event is posted from VM-Thread.
+   EVT_TRIG_TRACE(JVMTI_EVENT_GARBAGE_COLLECTION_FINISH,
+@@ -3194,6 +3244,12 @@ JvmtiGCMarker::~JvmtiGCMarker() {
+     return;
+   }
+
++#if ENABLE_COUNTER_EVENTS && ENABLE_COUNTER_FINER_EVENTS
++  if (JvmtiExport::should_post_counter_gc_event()) {
++    JvmtiExport::post_counter_gc_event(1);
++  }
++#endif
++
+   // JVMTI notify gc finish
+   if (JvmtiExport::should_post_garbage_collection_finish()) {
+     JvmtiExport::post_garbage_collection_finish();
+diff --git a/src/hotspot/share/prims/jvmtiExport.hpp b/src/hotspot/share/prims/jvmtiExport.hpp
+index 805c8c090da..3c89ed0decb 100644
+--- a/src/hotspot/share/prims/jvmtiExport.hpp
++++ b/src/hotspot/share/prims/jvmtiExport.hpp
+@@ -118,6 +118,11 @@ class JvmtiExport : public AllStatic {
+   JVMTI_SUPPORT_FLAG(should_post_garbage_collection_start)
+   JVMTI_SUPPORT_FLAG(should_post_garbage_collection_finish)
+   JVMTI_SUPPORT_FLAG(should_post_on_exceptions)
++  JVMTI_SUPPORT_FLAG(should_post_counter_thread_start)
++  JVMTI_SUPPORT_FLAG(should_post_counter_thread_end)
++#if ENABLE_COUNTER_FINER_EVENTS
++  JVMTI_SUPPORT_FLAG(should_post_counter_gc_event)
++#endif
+
+   // ------ the below maybe don't have to be (but are for now)
+   // fixed conditions here ------------
+@@ -392,6 +397,12 @@ class JvmtiExport : public AllStatic {
+   static void post_object_free(JvmtiEnv* env, GrowableArray<jlong>* objects) NOT_JVMTI_RETURN;
+   static void post_resource_exhausted(jint resource_exhausted_flags, const char* detail) NOT_JVMTI_RETURN;
+   static void record_vm_internal_object_allocation(oop object) NOT_JVMTI_RETURN;
++  static void post_counter_thread_start(jlong thread_id, jboolean is_gc) NOT_JVMTI_RETURN;
++  static void post_counter_thread_end(jlong thread_id, jboolean is_gc) NOT_JVMTI_RETURN;
++#if ENABLE_COUNTER_FINER_EVENTS
++  static void post_counter_gc_event(jint event_id) NOT_JVMTI_RETURN;
++#endif
++
+   // Post objects collected by vm_object_alloc_event_collector.
+   static void post_vm_object_alloc(JavaThread *thread, oop object) NOT_JVMTI_RETURN;
+   // Collects vm internal objects for later event posting.
+@@ -401,6 +412,26 @@ class JvmtiExport : public AllStatic {
+     }
+   }
+
++  inline static void counter_thread_start_event(long thread_id, bool is_gc) {
++    if (should_post_counter_thread_start()) {
++        post_counter_thread_start(thread_id, is_gc);
++    }
++  }
++
++  inline static void counter_thread_end_event(long thread_id, bool is_gc) {
++    if (should_post_counter_thread_end()) {
++        post_counter_thread_end(thread_id, is_gc);
++    }
++  }
++
++#if ENABLE_COUNTER_FINER_EVENTS
++  inline static void counter_gc_event(int event_id) {
++    if (should_post_counter_gc_event()) {
++        post_counter_gc_event(event_id);
++    }
++  }
++#endif
++
+   static void record_sampled_internal_object_allocation(oop object) NOT_JVMTI_RETURN;
+   // Post objects collected by sampled_object_alloc_event_collector.
+   static void post_sampled_object_alloc(JavaThread *thread, oop object) NOT_JVMTI_RETURN;
+diff --git a/src/hotspot/share/prims/jvmtiManageCapabilities.cpp b/src/hotspot/share/prims/jvmtiManageCapabilities.cpp
+index 5bb354b704c..7ba13b364db 100644
+--- a/src/hotspot/share/prims/jvmtiManageCapabilities.cpp
++++ b/src/hotspot/share/prims/jvmtiManageCapabilities.cpp
+@@ -104,6 +104,7 @@ jvmtiCapabilities JvmtiManageCapabilities::init_always_capabilities() {
+   jc.can_generate_resource_exhaustion_heap_events = 1;
+   jc.can_generate_resource_exhaustion_threads_events = 1;
+   jc.can_support_virtual_threads = 1;
++  jc.can_generate_counter_events = 1;
+   return jc;
+ }
+
+@@ -495,6 +496,8 @@ void JvmtiManageCapabilities:: print(const jvmtiCapabilities* cap) {
+     log_trace(jvmti)("can_generate_early_class_hook_events");
+   if (cap->can_support_virtual_threads)
+     log_trace(jvmti)("can_support_virtual_threads");
++  if (cap->can_generate_counter_events)
++    log_trace(jvmti)("can_generate_counter_events");
+ }
+
+ #endif
+diff --git a/src/hotspot/share/runtime/nonJavaThread.cpp b/src/hotspot/share/runtime/nonJavaThread.cpp
+index f537afcaa06..5c56903fb30 100644
+--- a/src/hotspot/share/runtime/nonJavaThread.cpp
++++ b/src/hotspot/share/runtime/nonJavaThread.cpp
+@@ -41,6 +41,10 @@
+ #include "jfr/jfr.hpp"
+ #endif
+
++#if ENABLE_COUNTER_EVENTS
++#include <cstring>
++#endif
++
+ // List of all NonJavaThreads and safe iteration over that list.
+
+ class NonJavaThread::List {
+@@ -126,8 +130,7 @@ NamedThread::NamedThread() :
+   NonJavaThread(),
+   _name(nullptr),
+   _processed_thread(nullptr),
+-  _gc_id(GCId::undefined())
+-{}
++  _gc_id(GCId::undefined()) {}
+
+ NamedThread::~NamedThread() {
+   FREE_C_HEAP_ARRAY(char, _name);
+diff --git a/src/hotspot/share/runtime/os.hpp b/src/hotspot/share/runtime/os.hpp
+index a9bbf294747..7742daad19a 100644
+--- a/src/hotspot/share/runtime/os.hpp
++++ b/src/hotspot/share/runtime/os.hpp
+@@ -349,7 +349,7 @@ class os: AllStatic {
+   }
+
+   // Give a name to the current thread.
+-  static void set_native_thread_name(const char *name);
++  static void set_native_thread_name(const char *name, bool is_gc_thread);
+
+   // Interface for stack banging (predetect possible stack overflow for
+   // exception processing)  There are guard pages, and above that shadow
+diff --git a/src/hotspot/share/runtime/thread.cpp b/src/hotspot/share/runtime/thread.cpp
+index a576c488697..81179c85866 100644
+--- a/src/hotspot/share/runtime/thread.cpp
++++ b/src/hotspot/share/runtime/thread.cpp
+@@ -52,6 +52,8 @@
+ #include "jfr/jfr.hpp"
+ #endif
+
++#include "prims/jvmtiExport.hpp"
++
+ #ifndef USE_LIBRARY_BASED_TLS_ONLY
+ // Current thread is maintained as a thread-local variable
+ THREAD_LOCAL Thread* Thread::_thr_current = nullptr;
+@@ -75,6 +77,8 @@ Thread::Thread() {
+   DEBUG_ONLY(clear_indirectly_suspendible_thread();)
+   DEBUG_ONLY(clear_indirectly_safepoint_thread();)
+
++  set_is_gc_thread(false);
++
+   // allocated data structures
+   set_osthread(nullptr);
+   set_resource_area(new (mtThread)ResourceArea());
+@@ -212,6 +216,10 @@ void Thread::call_run() {
+     os::current_thread_id(), p2i(stack_end()),
+     p2i(stack_base()), stack_size()/1024);
+
++#if ENABLE_COUNTER_EVENTS
++  JvmtiExport::counter_thread_start_event(osthread()->thread_id(), is_gc_thread());
++#endif
++
+   // Perform <ChildClass> initialization actions
+   DEBUG_ONLY(_run_state = PRE_RUN;)
+   this->pre_run();
+@@ -226,6 +234,10 @@ void Thread::call_run() {
+   assert(Thread::current_or_null() != nullptr, "current thread is unset");
+   assert(Thread::current_or_null() == this, "current thread is wrong");
+
++#if ENABLE_COUNTER_EVENTS
++  JvmtiExport::counter_thread_end_event(osthread()->thread_id(), is_gc_thread());
++#endif
++
+   // Perform <ChildClass> tear-down actions
+   DEBUG_ONLY(_run_state = POST_RUN;)
+   this->post_run();
+diff --git a/src/hotspot/share/runtime/thread.hpp b/src/hotspot/share/runtime/thread.hpp
+index fabeb218ea8..68cfeba16e2 100644
+--- a/src/hotspot/share/runtime/thread.hpp
++++ b/src/hotspot/share/runtime/thread.hpp
+@@ -296,6 +296,8 @@ class Thread: public ThreadShadow {
+   virtual void run() = 0;
+   virtual void pre_run() = 0;
+   virtual void post_run() = 0;  // Note: Thread must not be deleted prior to calling this!
++
++  bool _is_gc_thread;
+
+ #ifdef ASSERT
+   enum RunState {
+@@ -341,6 +343,9 @@ class Thread: public ThreadShadow {
+   // changing of the name of an instance.
+   virtual const char* name() const { return "Unknown thread"; }
+
++  virtual bool is_gc_thread() { return _is_gc_thread; }
++  virtual void set_is_gc_thread(bool is_gc_thread) { _is_gc_thread = is_gc_thread; }
++
+   // A thread's type name is also made available for debugging
+   // and logging.
+   virtual const char* type_name() const { return "Thread"; }
+@@ -362,7 +367,7 @@ class Thread: public ThreadShadow {
+
+   void set_native_thread_name(const char *name) {
+     assert(Thread::current() == this, "set_native_thread_name can only be called on the current thread");
+-    os::set_native_thread_name(name);
++    os::set_native_thread_name(name, _is_gc_thread);
+   }
+
+   // Support for Unhandled Oop detection
+diff --git a/src/hotspot/share/utilities/macros.hpp b/src/hotspot/share/utilities/macros.hpp
+index 244b18ecdd4..8a4fe794ac4 100644
+--- a/src/hotspot/share/utilities/macros.hpp
++++ b/src/hotspot/share/utilities/macros.hpp
+@@ -251,6 +251,14 @@
+ #define NOT_ZGC_RETURN_(code) { return code; }
+ #endif // INCLUDE_ZGC
+
++#ifndef ENABLE_COUNTER_EVENTS
++#define ENABLE_COUNTER_EVENTS 0
++#endif
++
++#ifndef ENABLE_COUNTER_FINER_EVENTS
++#define ENABLE_COUNTER_FINER_EVENTS 0
++#endif
++
+ #ifndef INCLUDE_JFR
+ #define INCLUDE_JFR 1
+ #endif

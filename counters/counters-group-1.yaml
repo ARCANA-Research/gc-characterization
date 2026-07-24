@@ -1,0 +1,10 @@
+---
+PERF:
+    counters:
+        - MEM_LOAD_RETIRED:L1_MISS
+        - MEM_LOAD_RETIRED:L1_HIT
+        - RAPL_ENERGY_PKG
+        - RAPL_ENERGY_DRAM
+    drop_concurrent:
+        - RAPL_ENERGY_PKG
+        - RAPL_ENERGY_DRAM

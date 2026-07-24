@@ -1,0 +1,4888 @@
+diff --git a/.gitignore b/.gitignore
+index dcc09fc1c6..46741420cb 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -36,3 +36,4 @@ configs/dram/lowp_sweep.cfg
+ .vscode
+ typings
+ .DS_Store
++.venv
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index 9543f965b7..7520a5d572 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -3,5 +3,6 @@
+         "src/python",
+         "ext",
+         "tests"
+-    ]
++    ],
++    "editor.tabSize": 4
+ }
+diff --git a/MAINTAINERS.yaml b/MAINTAINERS.yaml
+index f44393ea63..ae33f4e5a5 100644
+--- a/MAINTAINERS.yaml
++++ b/MAINTAINERS.yaml
+@@ -281,3 +281,4 @@ website:
+         - Bobby R. Bruce <bbruce@ucdavis.edu>
+     experts:
+         - Jason Lowe-Power <jason@lowepower.com>
++        
+\ No newline at end of file
+diff --git a/build_opts/X86 b/build_opts/X86
+index d82f5aa8cb..b64c84fc07 100644
+--- a/build_opts/X86
++++ b/build_opts/X86
+@@ -1,6 +1,6 @@
+ RUBY=y
+ NUMBER_BITS_PER_SET=128
+-PROTOCOL="MESI_Two_Level"
+-RUBY_PROTOCOL_MESI_Two_Level=y
++PROTOCOL="MESI_Three_Level"
++RUBY_PROTOCOL_MESI_Three_Level=y
+ BUILD_ISA=y
+ USE_X86_ISA=y
+diff --git a/configs/ruby/MESI_Three_Level.py b/configs/ruby/MESI_Three_Level.py
+index 9054fefc01..e7ae6e6756 100644
+--- a/configs/ruby/MESI_Three_Level.py
++++ b/configs/ruby/MESI_Three_Level.py
+@@ -207,9 +207,11 @@ def create_system(
+             # Connect the L0 and L1 controllers
+             l0_cntrl.prefetchQueue = MessageBuffer()
+             l0_cntrl.mandatoryQueue = MessageBuffer()
+-            l0_cntrl.bufferToL1 = MessageBuffer(ordered=True)
++            # l0_cntrl.bufferToL1 = MessageBuffer(ordered=True)
++            l0_cntrl.bufferToL1 = MessageBuffer(ordered=False)
+             l1_cntrl.bufferFromL0 = l0_cntrl.bufferToL1
+-            l0_cntrl.bufferFromL1 = MessageBuffer(ordered=True)
++            # l0_cntrl.bufferFromL1 = MessageBuffer(ordered=True)
++            l0_cntrl.bufferFromL1 = MessageBuffer(ordered=False)
+             l1_cntrl.bufferToL0 = l0_cntrl.bufferFromL1
+ 
+             # Connect the L1 controllers and the network
+diff --git a/ext/ramulator2/SConscript b/ext/ramulator2/SConscript
+new file mode 100644
+index 0000000000..6bcc4c819f
+--- /dev/null
++++ b/ext/ramulator2/SConscript
+@@ -0,0 +1,20 @@
++import os
++
++Import('env')
++
++if not os.path.exists(Dir('.').srcnode().abspath + '/ramulator2'):
++  env['HAVE_RAMULATOR2'] = False
++  Return()
++
++env['HAVE_RAMULATOR2'] = True
++ramulator2_path = os.path.join(Dir('#').abspath, 'ext/ramulator2/ramulator2/')
++env.Prepend(CPPPATH=Dir('.').srcnode())
++env.Append(
++  LIBS=['ramulator'],
++  LIBPATH=[ramulator2_path],
++  RPATH=[ramulator2_path],
++  CPPPATH=[
++  ramulator2_path+'/src/',
++  ramulator2_path+'/ext/spdlog/include',
++  ramulator2_path+'/ext/yaml-cpp/include'
++])
+diff --git a/ext/ramulator2/ramulator2 b/ext/ramulator2/ramulator2
+new file mode 160000
+index 0000000000..b2a97d4f9c
+--- /dev/null
++++ b/ext/ramulator2/ramulator2
+@@ -0,0 +1 @@
++Subproject commit b2a97d4f9cec78d9e160ee51145003bf0e99fcf7
+diff --git a/include/gem5/asm/generic/m5ops.h b/include/gem5/asm/generic/m5ops.h
+index 9bd10e07f0..ea7a710c60 100644
+--- a/include/gem5/asm/generic/m5ops.h
++++ b/include/gem5/asm/generic/m5ops.h
+@@ -81,6 +81,12 @@
+ #define M5OP_WORKLOAD           0x70
+ 
+ 
++#define M5OP_JDK_START_ROI       0x5c
++#define M5OP_JDK_STOP_ROI        0x5d
++#define M5OP_JDK_GC_EVENT        0x5e
++#define M5OP_JDK_GC_THREAD_START 0x5f
++#define M5OP_JDK_GC_THREAD_END   0x60
++
+ #define M5OP_FOREACH                                            \
+     M5OP(m5_arm, M5OP_ARM)                                      \
+     M5OP(m5_quiesce, M5OP_QUIESCE)                              \
+diff --git a/requirements.txt b/requirements.txt
+index 55f7bf0c2f..1de591788b 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,2 +1,2 @@
+ mypy==1.13.0
+-pre-commit==4.0.1
++pre-commit
+diff --git a/src/arch/x86/kvm/x86_cpu.cc b/src/arch/x86/kvm/x86_cpu.cc
+index a863ed79a2..2f942efc88 100644
+--- a/src/arch/x86/kvm/x86_cpu.cc
++++ b/src/arch/x86/kvm/x86_cpu.cc
+@@ -1684,6 +1684,7 @@ X86KvmCPU::getMsrIntersection() const
+             if (X86ISA::msrMap.find(*it) != X86ISA::msrMap.end()) {
+                 cachedMsrIntersection.push_back(*it);
+                 DPRINTF(Kvm, "kvm-x86: Adding MSR 0x%x\n", *it);
++                warn("kvm-x86: Adding MSR 0x%x\n", *it);
+             } else {
+                 warn("kvm-x86: MSR (0x%x) unsupported by gem5. Skipping.\n",
+                      *it);
+diff --git a/src/arch/x86/regs/misc.hh b/src/arch/x86/regs/misc.hh
+index 535d251948..e7f5dbcf85 100644
+--- a/src/arch/x86/regs/misc.hh
++++ b/src/arch/x86/regs/misc.hh
+@@ -408,16 +408,20 @@ enum : RegIndex
+     XcrBase,
+     Xcr0 = XcrBase,
+ 
+-    NumRegs
++    NumRegs,
++
++    
++    JdkReg
+ };
+ 
+ static inline bool
+ isValid(int index)
+ {
++    
+     return (index >= Cr0 && index < NumRegs &&
+             index != Cr1 &&
+             !(index > Cr4 && index < Cr8) &&
+-            !(index > Cr8 && index <= Cr15));
++            !(index > Cr8 && index <= Cr15)) || (index == JdkReg);
+ }
+ 
+ static inline RegIndex
+diff --git a/src/arch/x86/regs/msr.cc b/src/arch/x86/regs/msr.cc
+index 7fdb8841fd..827233ec1c 100644
+--- a/src/arch/x86/regs/msr.cc
++++ b/src/arch/x86/regs/msr.cc
+@@ -139,7 +139,9 @@ const MsrMap::value_type msrMapData[] = {
+     MsrVal(0xC0010114, misc_reg::VmCr),
+     MsrVal(0xC0010115, misc_reg::Ignne),
+     MsrVal(0xC0010116, misc_reg::SmmCtl),
+-    MsrVal(0xC0010117, misc_reg::VmHsavePa)
++    MsrVal(0xC0010117, misc_reg::VmHsavePa),
++    
++    MsrVal(0xC0010118, misc_reg::JdkReg)
+ };
+ 
+ static const unsigned msrMapSize = sizeof(msrMapData) / sizeof(msrMapData[0]);
+diff --git a/src/cpu/base.cc b/src/cpu/base.cc
+index cc093e7000..1d2e20b9a6 100644
+--- a/src/cpu/base.cc
++++ b/src/cpu/base.cc
+@@ -901,8 +901,12 @@ FetchCPUStats::FetchCPUStats(statistics::Group *parent, int thread_id)
+     ADD_STAT(icacheStallCycles, statistics::units::Cycle::get(),
+              "ICache total stall cycles"),
+     ADD_STAT(numFetchSuspends, statistics::units::Count::get(),
+-             "Number of times Execute suspended instruction fetching")
+-
++             "Number of times Execute suspended instruction fetching"),
++    
++    ADD_STAT(numGCInsts, statistics::units::Count::get(),
++             "Number of GC instructions fetched (thread level)"),
++    ADD_STAT(numNonGCInsts, statistics::units::Count::get(),
++             "Number of Non GC instructions fetched (thread level)")
+ {
+     fetchRate
+         .flags(statistics::total);
+diff --git a/src/cpu/base.hh b/src/cpu/base.hh
+index 28cd90f3e2..1e7216a033 100644
+--- a/src/cpu/base.hh
++++ b/src/cpu/base.hh
+@@ -738,6 +738,9 @@ class BaseCPU : public ClockedObject
+         /* Number of times fetch was asked to suspend by Execute */
+         statistics::Scalar numFetchSuspends;
+ 
++        
++        statistics::Scalar numGCInsts;
++        statistics::Scalar numNonGCInsts;
+     };
+ 
+     struct ExecuteCPUStats: public statistics::Group
+diff --git a/src/cpu/kvm/vm.cc b/src/cpu/kvm/vm.cc
+index e714a40b22..9c0ec0c310 100644
+--- a/src/cpu/kvm/vm.cc
++++ b/src/cpu/kvm/vm.cc
+@@ -333,6 +333,7 @@ KvmVM::KvmVM(const KvmVMParams &params)
+ 
+ KvmVM::~KvmVM()
+ {
++    system->setKvmVM(nullptr);
+     if (vmFD != -1)
+         close(vmFD);
+ 
+diff --git a/src/cpu/o3/dyn_inst.hh b/src/cpu/o3/dyn_inst.hh
+index 9cb3d3caa9..6fdd899ed4 100644
+--- a/src/cpu/o3/dyn_inst.hh
++++ b/src/cpu/o3/dyn_inst.hh
+@@ -1168,6 +1168,19 @@ class DynInst : public ExecContext, public RefCounted
+         cpu->setReg(reg, val, threadNumber);
+         setResult(reg->regClass(), val);
+     }
++
++  
++  private:
++
++    bool _isGC = false;
++    bool _isNonGC = false;
++
++  public:
++
++    bool getIsGC() { return _isGC; }
++    bool getIsNonGC() { return _isNonGC; }
++    void setIsGC(bool isGC) { _isGC = isGC; }
++    void setIsNonGC(bool isNonGC) { _isNonGC = isNonGC; }
+ };
+ 
+ } // namespace o3
+diff --git a/src/cpu/o3/fetch.cc b/src/cpu/o3/fetch.cc
+index b0bea842f5..504b3a4fb5 100644
+--- a/src/cpu/o3/fetch.cc
++++ b/src/cpu/o3/fetch.cc
+@@ -68,6 +68,9 @@
+ #include "sim/full_system.hh"
+ #include "sim/system.hh"
+ 
++
++#include "arch/x86/regs/misc.hh"
++
+ namespace gem5
+ {
+ 
+@@ -662,7 +665,7 @@ Fetch::finishTranslation(const Fault &fault, const RequestPtr &mem_req)
+         DPRINTF(Fetch, "[tid:%i] Translation faulted, building noop.\n", tid);
+         // We will use a nop in ordier to carry the fault.
+         DynInstPtr instruction = buildInst(tid, nopStaticInstPtr, nullptr,
+-                fetch_pc, fetch_pc, false);
++                fetch_pc, fetch_pc, false, false, false); 
+         instruction->setNotAnInst();
+ 
+         instruction->setPredTarg(fetch_pc);
+@@ -1015,10 +1018,11 @@ Fetch::checkSignalsAndUpdate(ThreadID tid)
+     return false;
+ }
+ 
++
+ DynInstPtr
+ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
+         StaticInstPtr curMacroop, const PCStateBase &this_pc,
+-        const PCStateBase &next_pc, bool trace)
++        const PCStateBase &next_pc, bool trace, bool isGC, bool isNonGC)
+ {
+     // Get a sequence number.
+     InstSeqNum seq = cpu->getAndIncrementInstSeq();
+@@ -1030,6 +1034,15 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
+     // Create a new DynInst from the instruction fetched.
+     DynInstPtr instruction = new (arrays) DynInst(
+             arrays, staticInst, curMacroop, this_pc, next_pc, seq, cpu);
++
++    
++    instruction->setIsGC(isGC);
++    instruction->setIsNonGC(isNonGC);
++
++    if (isGC && isNonGC) {
++        panic("JDK: instruction fetch is GC and non-GC");
++    }
++
+     instruction->setTid(tid);
+ 
+     instruction->setThreadState(cpu->thread[tid]);
+@@ -1176,6 +1189,12 @@ Fetch::fetch(bool &status_change)
+     auto *dec_ptr = decoder[tid];
+     const Addr pc_mask = dec_ptr->pcMask();
+ 
++    
++    RegVal jdk_msr =
++    cpu->tcBase(tid)->readMiscReg(X86ISA::misc_reg::JdkReg);
++    bool isGC = cpu->system->isGC(jdk_msr);
++    bool isNonGC = cpu->system->isNonGC(jdk_msr);
++
+     // Loop through instruction memory from the cache.
+     // Keep issuing while fetchWidth is available and branch is not
+     // predicted taken
+@@ -1220,8 +1239,17 @@ Fetch::fetch(bool &status_change)
+                     staticInst = dec_ptr->decode(this_pc);
+ 
+                     // Increment stat of fetched instructions.
++                    // warn("INCREMENTING INSTS COUNT");
+                     cpu->fetchStats[tid]->numInsts++;
+ 
++                    
++                    if (isGC) {
++                        cpu->fetchStats[tid]->numGCInsts++;
++                    }
++                    if (isNonGC) {
++                        cpu->fetchStats[tid]->numNonGCInsts++;
++                    }
++
+                     if (staticInst->isMacroop()) {
+                         curMacroop = staticInst;
+                     } else {
+@@ -1248,7 +1276,8 @@ Fetch::fetch(bool &status_change)
+             }
+ 
+             DynInstPtr instruction = buildInst(
+-                    tid, staticInst, curMacroop, this_pc, *next_pc, true);
++                    tid, staticInst, curMacroop, this_pc, *next_pc, true,
++                    isGC, isNonGC); 
+ 
+             ppFetch->notify(instruction);
+             numInst++;
+diff --git a/src/cpu/o3/fetch.hh b/src/cpu/o3/fetch.hh
+index a6957a660a..88f907ba4a 100644
+--- a/src/cpu/o3/fetch.hh
++++ b/src/cpu/o3/fetch.hh
+@@ -363,9 +363,10 @@ class Fetch
+     RequestPort &getInstPort() { return icachePort; }
+ 
+   private:
++    
+     DynInstPtr buildInst(ThreadID tid, StaticInstPtr staticInst,
+             StaticInstPtr curMacroop, const PCStateBase &this_pc,
+-            const PCStateBase &next_pc, bool trace);
++            const PCStateBase &next_pc, bool trace, bool isGC, bool isNonGC);
+ 
+     /** Returns the appropriate thread to fetch, given the fetch policy. */
+     ThreadID getFetchingThread();
+diff --git a/src/cpu/o3/iew.hh b/src/cpu/o3/iew.hh
+index 4fe8227dcc..82f47cf159 100644
+--- a/src/cpu/o3/iew.hh
++++ b/src/cpu/o3/iew.hh
+@@ -414,7 +414,6 @@ class IEW
+     /** Maximum size of the skid buffer. */
+     unsigned skidBufferMax;
+ 
+-
+     struct IEWStats : public statistics::Group
+     {
+         IEWStats(CPU *cpu);
+diff --git a/src/cpu/o3/lsq.cc b/src/cpu/o3/lsq.cc
+index d30a399f92..e601543d98 100644
+--- a/src/cpu/o3/lsq.cc
++++ b/src/cpu/o3/lsq.cc
+@@ -1000,6 +1000,11 @@ LSQ::SplitDataRequest::initiateTranslation()
+     // avoid a potential assert in setFlags() when we call it from  finish().
+     _mainReq->setPaddr(0);
+ 
++    
++    _mainReq->setIsGC(instruction()->getIsGC());
++    _mainReq->setIsNonGC(instruction()->getIsNonGC());
++    _mainReq->setIsJdkLoad(instruction()->isLoad());
++
+     /* Get the pre-fix, possibly unaligned. */
+     auto it_start = _byteEnable.begin();
+     auto it_end = _byteEnable.begin() + (next_addr - base_addr);
+@@ -1128,6 +1133,11 @@ LSQ::LSQRequest::addReq(Addr addr, unsigned size,
+             );
+         }
+ 
++        
++        req->setIsGC(instruction()->getIsGC());
++        req->setIsNonGC(instruction()->getIsNonGC());
++        req->setIsJdkLoad(instruction()->isLoad());
++
+         _reqs.push_back(req);
+     }
+ }
+diff --git a/src/cpu/o3/lsq_unit.cc b/src/cpu/o3/lsq_unit.cc
+index 68fd464627..46e23ec165 100644
+--- a/src/cpu/o3/lsq_unit.cc
++++ b/src/cpu/o3/lsq_unit.cc
+@@ -270,11 +270,23 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
+                "Number of times an access to memory failed due to the cache "
+                "being blocked"),
+       ADD_STAT(loadToUse, "Distribution of cycle latency between the "
+-                "first time a load is issued and its completion")
++                "first time a load is issued and its completion"),
++      
++      ADD_STAT(gcloadToUse, "Distribution of cycle latency between the "
++        "first time a GC load is issued and its completion"),
++      ADD_STAT(nonGcloadToUse, "Distribution of cycle latency between the "
++          "first time a NonGC load is issued and its completion")
+ {
+     loadToUse
+         .init(0, 299, 10)
+         .flags(statistics::nozero);
++    
++    gcloadToUse
++        .init(0, 299, 10)
++        .flags(statistics::nozero);
++    nonGcloadToUse
++        .init(0, 299, 10)
++        .flags(statistics::nozero);
+ }
+ 
+ void
+@@ -732,6 +744,16 @@ LSQUnit::commitLoad()
+             && inst->lastWakeDependents != -1) {
+         stats.loadToUse.sample(cpu->ticksToCycles(
+                     inst->lastWakeDependents - inst->firstIssue));
++        
++        if (inst->getIsGC()) {
++          stats.gcloadToUse.sample(cpu->ticksToCycles(
++            inst->lastWakeDependents - inst->firstIssue));
++        }
++        
++        if (inst->getIsNonGC()) {
++          stats.nonGcloadToUse.sample(cpu->ticksToCycles(
++            inst->lastWakeDependents - inst->firstIssue));
++        }
+     }
+ 
+     loadQueue.front().clear();
+@@ -853,11 +875,14 @@ LSQUnit::writebackStores()
+ 
+         request->buildPackets();
+ 
++        
+         DPRINTF(LSQUnit, "D-Cache: Writing back store idx:%i PC:%s "
+-                "to Addr:%#x, data:%#x [sn:%lli]\n",
++                "to Addr:%#x, data:%#x [sn:%lli] "
++                "(isgc: %d, isnongc: %d)\n",
+                 storeWBIt.idx(), inst->pcState(),
+                 request->mainReq()->getPaddr(), (int)*(inst->memData),
+-                inst->seqNum);
++                inst->seqNum,
++                inst->getIsGC(), inst->getIsNonGC());
+ 
+         // @todo: Remove this SC hack once the memory system handles it.
+         if (inst->isStoreConditional()) {
+@@ -1568,8 +1593,11 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
+     }
+ 
+     // If there's no forwarding case, then go access memory
+-    DPRINTF(LSQUnit, "Doing memory access for inst [sn:%lli] PC %s\n",
+-            load_inst->seqNum, load_inst->pcState());
++    
++    DPRINTF(LSQUnit, "Doing memory access for inst [sn:%lli] PC %s "
++            "(isgc: %d, isnongc: %d)\n",
++            load_inst->seqNum, load_inst->pcState(),
++            load_inst->getIsGC(), load_inst->getIsNonGC());
+ 
+     // Allocate memory if this is the first time a load is issued.
+     if (!load_inst->memData) {
+diff --git a/src/cpu/o3/lsq_unit.hh b/src/cpu/o3/lsq_unit.hh
+index b807179f2d..639b325868 100644
+--- a/src/cpu/o3/lsq_unit.hh
++++ b/src/cpu/o3/lsq_unit.hh
+@@ -538,6 +538,10 @@ class LSQUnit
+         /** Distribution of cycle latency between the first time a load
+          * is issued and its completion */
+         statistics::Distribution loadToUse;
++
++        
++        statistics::Distribution gcloadToUse;
++        statistics::Distribution nonGcloadToUse;
+     } stats;
+ 
+   public:
+diff --git a/src/cpu/simple/base.cc b/src/cpu/simple/base.cc
+index b42b68992f..a0623769f4 100644
+--- a/src/cpu/simple/base.cc
++++ b/src/cpu/simple/base.cc
+@@ -77,6 +77,9 @@
+ #include "sim/stats.hh"
+ #include "sim/system.hh"
+ 
++
++#include "arch/x86/regs/misc.hh"
++
+ namespace gem5
+ {
+ 
+@@ -166,6 +169,18 @@ BaseSimpleCPU::countFetchInst()
+     if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
+         // increment thread level numInsts fetched count
+         fetchStats[t_info.thread->threadId()]->numInsts++;
++        
++        RegVal jdk_msr =
++        threadContexts[curThread]->readMiscReg(X86ISA::misc_reg::JdkReg);
++        System *system_ptr = threadContexts[curThread]->getSystemPtr();
++        bool isGC = system_ptr->isGC(jdk_msr);
++        bool isNonGC = system_ptr->isNonGC(jdk_msr);
++        if (isGC) {
++            fetchStats[t_info.thread->threadId()]->numGCInsts++;
++        }
++        if (isNonGC) {
++            fetchStats[t_info.thread->threadId()]->numNonGCInsts++;
++        }
+     }
+     // increment thread level numOps fetched count
+     fetchStats[t_info.thread->threadId()]->numOps++;
+diff --git a/src/cpu/translation.hh b/src/cpu/translation.hh
+index 2156a50e8f..1420e0991c 100644
+--- a/src/cpu/translation.hh
++++ b/src/cpu/translation.hh
+@@ -254,7 +254,8 @@ class DataTranslation : public BaseMMU::Translation
+            BaseMMU::Mode mode)
+     {
+         assert(state);
+-        assert(mode == state->mode);
++        
++        assert(mode == state->mode || req->isCacheClean());
+         if (state->finish(fault, index)) {
+             if (state->getFault() == NoFault) {
+                 // Don't access the request if faulted (due to squash)
+diff --git a/src/mem/Ramulator2.py b/src/mem/Ramulator2.py
+new file mode 100644
+index 0000000000..da861ae186
+--- /dev/null
++++ b/src/mem/Ramulator2.py
+@@ -0,0 +1,19 @@
++from m5.objects.AbstractMemory import *
++from m5.params import *
++from m5.SimObject import *
++
++
++class Ramulator2(AbstractMemory):
++    type = "Ramulator2"
++    cxx_class = "gem5::memory::Ramulator2"
++    cxx_header = "mem/ramulator2.hh"
++
++    port = ResponsePort(
++        "The port for receiving memory requests and sending responses"
++    )
++    config_path = Param.String("Path to the DRAMSys configuration")
++
++    
++    output_path = Param.String("Output path")
++    trace_path = Param.String("Trace path")
++    create_trace = Param.Bool(False, "Generate trace")
+diff --git a/src/mem/SConscript b/src/mem/SConscript
+index 70a5c43758..7057ef8f1f 100644
+--- a/src/mem/SConscript
++++ b/src/mem/SConscript
+@@ -167,3 +167,9 @@ DebugFlag('TokenPort')
+ DebugFlag("MemChecker")
+ DebugFlag("MemCheckerMonitor")
+ DebugFlag("QOS")
++
++
++if env['HAVE_RAMULATOR2']:
++  SimObject('Ramulator2.py', sim_objects=['Ramulator2'])
++  Source('ramulator2.cc')
++  DebugFlag("Ramulator2")
+diff --git a/src/mem/cache/base.cc b/src/mem/cache/base.cc
+index cb6861045d..197140a05c 100644
+--- a/src/mem/cache/base.cc
++++ b/src/mem/cache/base.cc
+@@ -437,6 +437,13 @@ BaseCache::recvTimingReq(PacketPtr pkt)
+         // After the evicted blocks are selected, they must be forwarded
+         // to the write buffer to ensure they logically precede anything
+         // happening below
++        
++        for (PacketList::iterator wb_it = writebacks.begin();
++                wb_it != writebacks.end(); ++wb_it) {
++            (*wb_it)->req->setIsGC(pkt->req->getIsGC());
++            (*wb_it)->req->setIsNonGC(pkt->req->getIsNonGC());
++        }
++
+         doWritebacks(writebacks, clockEdge(lat + forwardLatency));
+     }
+ 
+@@ -627,7 +634,15 @@ BaseCache::recvTimingResp(PacketPtr pkt)
+     }
+ 
+     const Tick forward_time = clockEdge(forwardLatency) + pkt->headerDelay;
++
+     // copy writebacks to write buffer
++    
++    for (PacketList::iterator wb_it = writebacks.begin();
++            wb_it != writebacks.end(); ++wb_it) {
++        (*wb_it)->req->setIsGC(pkt->req->getIsGC());
++        (*wb_it)->req->setIsNonGC(pkt->req->getIsNonGC());
++    }
++
+     doWritebacks(writebacks, forward_time);
+ 
+     DPRINTF(CacheVerbose, "%s: Leaving with %s\n", __func__, pkt->print());
+@@ -2075,7 +2090,16 @@ BaseCache::CacheCmdStats::CacheCmdStats(BaseCache &c,
+                ("average " + name + " mshr miss latency").c_str()),
+       ADD_STAT(avgMshrUncacheableLatency, statistics::units::Rate<
+                     statistics::units::Tick, statistics::units::Count>::get(),
+-               ("average " + name + " mshr uncacheable latency").c_str())
++               ("average " + name + " mshr uncacheable latency").c_str()),
++      
++      ADD_STAT(GCHits, statistics::units::Count::get(),
++               ("number of GC " + name + " hits").c_str()),
++      ADD_STAT(GCMisses, statistics::units::Count::get(),
++               ("number of GC " + name + " misses").c_str()),
++      ADD_STAT(NonGCHits, statistics::units::Count::get(),
++               ("number of Non GC " + name + " hits").c_str()),
++      ADD_STAT(NonGCMisses, statistics::units::Count::get(),
++               ("number of Non GC " + name + " misses").c_str())
+ {
+ }
+ 
+@@ -2211,6 +2235,39 @@ BaseCache::CacheCmdStats::regStatsFromParent()
+     for (int i = 0; i < max_requestors; i++) {
+         avgMshrUncacheableLatency.subname(i, system->getRequestorName(i));
+     }
++
++    
++    GCHits
++        .init(max_requestors)
++        .flags(total | nozero | nonan)
++        ;
++    for (int i = 0; i < max_requestors; i++) {
++      GCHits.subname(i, system->getRequestorName(i));
++    }
++
++    GCMisses
++        .init(max_requestors)
++        .flags(total | nozero | nonan)
++        ;
++    for (int i = 0; i < max_requestors; i++) {
++      GCMisses.subname(i, system->getRequestorName(i));
++    }
++
++    NonGCHits
++        .init(max_requestors)
++        .flags(total | nozero | nonan)
++        ;
++    for (int i = 0; i < max_requestors; i++) {
++      NonGCHits.subname(i, system->getRequestorName(i));
++    }
++
++    NonGCMisses
++        .init(max_requestors)
++        .flags(total | nozero | nonan)
++        ;
++    for (int i = 0; i < max_requestors; i++) {
++      NonGCMisses.subname(i, system->getRequestorName(i));
++    }
+ }
+ 
+ BaseCache::CacheStats::CacheStats(BaseCache &c)
+diff --git a/src/mem/cache/base.hh b/src/mem/cache/base.hh
+index 8c4c3f32da..803028c8d6 100644
+--- a/src/mem/cache/base.hh
++++ b/src/mem/cache/base.hh
+@@ -1043,6 +1043,13 @@ class BaseCache : public ClockedObject
+         statistics::Formula avgMshrMissLatency;
+         /** The average latency of an MSHR miss, per command and thread. */
+         statistics::Formula avgMshrUncacheableLatency;
++
++        
++        statistics::Vector GCHits;
++        statistics::Vector GCMisses;
++
++        statistics::Vector NonGCHits;
++        statistics::Vector NonGCMisses;
+     };
+ 
+     struct CacheStats : public statistics::Group
+@@ -1306,6 +1313,13 @@ class BaseCache : public ClockedObject
+     {
+         assert(pkt->req->requestorId() < system->maxRequestors());
+         stats.cmdStats(pkt).misses[pkt->req->requestorId()]++;
++        
++        if (pkt->req->getIsGC()) {
++            stats.cmdStats(pkt).GCMisses[pkt->req->requestorId()]++;
++        }
++        if (pkt->req->getIsNonGC()) {
++            stats.cmdStats(pkt).NonGCMisses[pkt->req->requestorId()]++;
++        }
+         pkt->req->incAccessDepth();
+         if (missCount) {
+             --missCount;
+@@ -1317,6 +1331,13 @@ class BaseCache : public ClockedObject
+     {
+         assert(pkt->req->requestorId() < system->maxRequestors());
+         stats.cmdStats(pkt).hits[pkt->req->requestorId()]++;
++        
++        if (pkt->req->getIsGC()) {
++            stats.cmdStats(pkt).GCHits[pkt->req->requestorId()]++;
++        }
++        if (pkt->req->getIsNonGC()) {
++            stats.cmdStats(pkt).NonGCHits[pkt->req->requestorId()]++;
++        }
+     }
+ 
+     /**
+diff --git a/src/mem/cache/cache.cc b/src/mem/cache/cache.cc
+index 294773952b..24c9ee5bbd 100644
+--- a/src/mem/cache/cache.cc
++++ b/src/mem/cache/cache.cc
+@@ -1130,6 +1130,14 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
+                 // latency and the delay provided by the crossbar
+                 Tick forward_time = clockEdge(forwardLatency) +
+                     pkt->headerDelay;
++
++                
++                for (PacketList::iterator wb_it = writebacks.begin();
++                        wb_it != writebacks.end(); ++wb_it) {
++                    (*wb_it)->req->setIsGC(pkt->req->getIsGC());
++                    (*wb_it)->req->setIsNonGC(pkt->req->getIsNonGC());
++                }
++
+                 doWritebacks(writebacks, forward_time);
+             } else {
+                 doWritebacksAtomic(writebacks);
+diff --git a/src/mem/cache/cache_blk.cc b/src/mem/cache/cache_blk.cc
+index 700075e523..040614db92 100644
+--- a/src/mem/cache/cache_blk.cc
++++ b/src/mem/cache/cache_blk.cc
+@@ -56,6 +56,10 @@ CacheBlk::insert(const KeyType &tag,
+ 
+     insert(tag);
+ 
++    
++    accessByGC = false;
++    accessByNonGC = false;
++
+     // Set source requestor ID
+     setSrcRequestorId(src_requestor_ID);
+ 
+diff --git a/src/mem/cache/cache_blk.hh b/src/mem/cache/cache_blk.hh
+index a2027f25f1..7a87ce88d8 100644
+--- a/src/mem/cache/cache_blk.hh
++++ b/src/mem/cache/cache_blk.hh
+@@ -203,6 +203,8 @@ class CacheBlk : public TaggedEntry
+     {
+         TaggedEntry::invalidate();
+ 
++        clearJdkFlags(); 
++
+         clearPrefetched();
+         clearCoherenceBits(AllBits);
+ 
+@@ -506,6 +508,17 @@ class CacheBlk : public TaggedEntry
+ 
+     /** Whether this block is an unaccessed hardware prefetch. */
+     bool _prefetched = 0;
++
++    
++  public:
++    bool accessByGC = false;
++    bool accessByNonGC = false;
++
++  protected:
++    void clearJdkFlags() {
++      accessByGC = false;
++      accessByNonGC = false;
++    }
+ };
+ 
+ /**
+diff --git a/src/mem/cache/tags/base.cc b/src/mem/cache/tags/base.cc
+index faf9add03a..e661d80794 100644
+--- a/src/mem/cache/tags/base.cc
++++ b/src/mem/cache/tags/base.cc
+@@ -116,6 +116,13 @@ BaseTags::insertBlock(const PacketPtr pkt, CacheBlk *blk)
+     blk->insert({pkt->getAddr(), pkt->isSecure()}, requestor_id,
+                 pkt->req->taskId(), partition_id);
+ 
++    
++    if (pkt->req->getIsGC()) {
++        blk->accessByGC = true;
++    } else if (pkt->req->getIsNonGC()) {
++        blk->accessByNonGC = true;
++    }
++
+     // Check if cache warm up is done
+     if (!warmedUp && stats.tagsInUse.value() >= warmupBound) {
+         warmedUp = true;
+@@ -125,6 +132,12 @@ BaseTags::insertBlock(const PacketPtr pkt, CacheBlk *blk)
+     // We only need to write into one tag and one data block.
+     stats.tagAccesses += 1;
+     stats.dataAccesses += 1;
++    
++    if (pkt->req->getIsGC()) {
++        stats.dataGCAccesses += 1;
++    } else if (pkt->req->getIsNonGC()) {
++        stats.dataNonGCAccesses += 1;
++    }
+ }
+ 
+ void
+@@ -256,7 +269,23 @@ BaseTags::BaseTagStats::BaseTagStats(BaseTags &_tags)
+     ADD_STAT(tagAccesses, statistics::units::Count::get(),
+              "Number of tag accesses"),
+     ADD_STAT(dataAccesses, statistics::units::Count::get(),
+-             "Number of data accesses")
++             "Number of data accesses"),
++    
++    ADD_STAT(dataGCAccesses, statistics::units::Count::get(),
++             "Number of GC data accesses"),
++    ADD_STAT(dataNonGCAccesses, statistics::units::Count::get(),
++             "Number of Non GC data accesses"),
++    ADD_STAT(numBlocksInvalidated, statistics::units::Count::get(),
++             "Number of blocks invalidated"),
++    ADD_STAT(numBlocksInvalidatedAccessedOnlyGC,
++             statistics::units::Count::get(),
++             "Number of blocks invalidated that were accessed only by GC"),
++    ADD_STAT(numBlocksInvalidatedAccessedOnlyNonGC,
++             statistics::units::Count::get(),
++             "Number of blocks invalidated that were accessed only by Non GC"),
++    ADD_STAT(numBlocksInvalidatedAccessedGCAndNonGC,
++             statistics::units::Count::get(),
++             "Number of blocks invalidated that were accessed by GC and NonGC")
+ {
+ }
+ 
+diff --git a/src/mem/cache/tags/base.hh b/src/mem/cache/tags/base.hh
+index 71b50f6e6b..36b2fee2fa 100644
+--- a/src/mem/cache/tags/base.hh
++++ b/src/mem/cache/tags/base.hh
+@@ -158,6 +158,14 @@ class BaseTags : public ClockedObject
+         statistics::Scalar tagAccesses;
+         /** Number of data blocks consulted over all accesses. */
+         statistics::Scalar dataAccesses;
++
++        
++        statistics::Scalar dataGCAccesses;
++        statistics::Scalar dataNonGCAccesses;
++        statistics::Scalar numBlocksInvalidated;
++        statistics::Scalar numBlocksInvalidatedAccessedOnlyGC;
++        statistics::Scalar numBlocksInvalidatedAccessedOnlyNonGC;
++        statistics::Scalar numBlocksInvalidatedAccessedGCAndNonGC;
+     } stats;
+ 
+   public:
+@@ -263,6 +271,16 @@ class BaseTags : public ClockedObject
+         stats.totalRefs += blk->getRefCount();
+         stats.sampledRefs++;
+ 
++        
++        stats.numBlocksInvalidated++;
++        if (blk->accessByGC && blk->accessByNonGC) {
++            stats.numBlocksInvalidatedAccessedGCAndNonGC++;
++        } else if (blk->accessByGC && !blk->accessByNonGC) {
++            stats.numBlocksInvalidatedAccessedOnlyGC++;
++        } else if (!blk->accessByGC && blk->accessByNonGC) {
++            stats.numBlocksInvalidatedAccessedOnlyNonGC++;
++        }
++
+         blk->invalidate();
+     }
+ 
+diff --git a/src/mem/cache/tags/base_set_assoc.hh b/src/mem/cache/tags/base_set_assoc.hh
+index fbc525f9e6..63a3763857 100644
+--- a/src/mem/cache/tags/base_set_assoc.hh
++++ b/src/mem/cache/tags/base_set_assoc.hh
+@@ -136,13 +136,37 @@ class BaseSetAssoc : public BaseTags
+         if (sequentialAccess) {
+             if (blk != nullptr) {
+                 stats.dataAccesses += 1;
++                
++                if (pkt->req->getIsGC()) {
++                    blk->accessByGC = true;
++                } else if (pkt->req->getIsNonGC()) {
++                    blk->accessByNonGC = true;
++                }
++                
++                if (pkt->req->getIsGC()) {
++                    stats.dataGCAccesses += 1;
++                } else if (pkt->req->getIsNonGC()) {
++                    stats.dataNonGCAccesses += 1;
++                }
+             }
+         } else {
+             stats.dataAccesses += allocAssoc;
++            
++            if (pkt->req->getIsGC()) {
++                stats.dataGCAccesses += allocAssoc;
++            } else if (pkt->req->getIsNonGC()) {
++                stats.dataNonGCAccesses += allocAssoc;
++            }
+         }
+ 
+         // If a cache hit
+         if (blk != nullptr) {
++            
++            if (pkt->req->getIsGC()) {
++                blk->accessByGC = true;
++            } else if (pkt->req->getIsNonGC()) {
++                blk->accessByNonGC = true;
++            }
+             // Update number of references to accessed block
+             blk->increaseRefCount();
+ 
+diff --git a/src/mem/cache/tags/sector_tags.cc b/src/mem/cache/tags/sector_tags.cc
+index 76c1ee7de5..9940b84756 100644
+--- a/src/mem/cache/tags/sector_tags.cc
++++ b/src/mem/cache/tags/sector_tags.cc
+@@ -164,14 +164,39 @@ SectorTags::accessBlock(const PacketPtr pkt, Cycles &lat)
+     stats.tagAccesses += allocAssoc;
+     if (sequentialAccess) {
+         if (blk != nullptr) {
++            
++            if (pkt->req->getIsGC()) {
++                blk->accessByGC = true;
++            } else if (pkt->req->getIsNonGC()) {
++                blk->accessByNonGC = true;
++            }
+             stats.dataAccesses += 1;
++            
++            if (pkt->req->getIsGC()) {
++                stats.dataGCAccesses += 1;
++            } else if (pkt->req->getIsNonGC()) {
++                stats.dataNonGCAccesses += 1;
++            }
+         }
+     } else {
+         stats.dataAccesses += allocAssoc*numBlocksPerSector;
++        
++        if (pkt->req->getIsGC()) {
++            stats.dataGCAccesses += allocAssoc*numBlocksPerSector;
++        } else if (pkt->req->getIsNonGC()) {
++            stats.dataNonGCAccesses += allocAssoc*numBlocksPerSector;
++        }
+     }
+ 
+     // If a cache hit
+     if (blk != nullptr) {
++        
++        if (pkt->req->getIsGC()) {
++            blk->accessByGC = true;
++        } else if (pkt->req->getIsNonGC()) {
++            blk->accessByNonGC = true;
++        }
++
+         // Update number of references to accessed block
+         blk->increaseRefCount();
+ 
+diff --git a/src/mem/ramulator2.cc b/src/mem/ramulator2.cc
+new file mode 100644
+index 0000000000..5d87d6d159
+--- /dev/null
++++ b/src/mem/ramulator2.cc
+@@ -0,0 +1,377 @@
++#include "mem/ramulator2.hh"
++
++#include "base/callback.hh"
++#include "base/trace.hh"
++#include "debug/Drain.hh"
++#include "debug/Ramulator2.hh"
++#include "sim/system.hh"
++
++// spdlog collides with gem5...
++#pragma push_macro("warn")
++#undef warn
++
++#include "ramulator2/src/base/base.h"
++#include "ramulator2/src/base/config.h"
++#include "ramulator2/src/base/request.h"
++#include "ramulator2/src/frontend/frontend.h"
++#include "ramulator2/src/memory_system/memory_system.h"
++
++
++#include "base/output.hh"
++
++namespace gem5
++{
++
++namespace memory
++{
++
++Ramulator2::Ramulator2(const Params &p) :
++    AbstractMemory(p),
++    port(name() + ".port", *this),
++    config_path(p.config_path),
++    output_path(p.output_path), 
++    trace_path(p.trace_path), 
++    create_trace(p.create_trace), 
++    retryReq(false), retryResp(false), startTick(0),
++    nbrOutstandingReads(0), nbrOutstandingWrites(0),
++    sendResponseEvent([this]{ sendResponse(); }, name()),
++    tickEvent([this]{ tick(); }, name())
++{
++    DPRINTF(Ramulator2, "Instantiated Ramulator2 \n");
++
++    stats_output_file = simout.findOrCreate(output_path)->stream();
++    if (create_trace) {
++        trace_file = simout.findOrCreate(trace_path)->stream();
++    }
++
++    registerExitCallback([this]() {
++        stats_output_file->flush();
++        if (create_trace) {
++            trace_file->flush();
++        }
++    });
++}
++
++void
++Ramulator2::init()
++{
++    AbstractMemory::init();
++
++    if (!port.isConnected()) {
++        fatal("Ramulator2 %s is unconnected!\n", name());
++    } else {
++        port.sendRangeChange();
++    }
++
++    YAML::Node config = Ramulator::Config::parse_config_file(config_path, {});
++    ramulator2_frontend = Ramulator::Factory::create_frontend(config);
++    ramulator2_memorysystem = Ramulator::Factory::create_memory_system(config);
++
++    
++    if (create_trace) {
++        ramulator2_memorysystem->set_trace(trace_file);
++    }
++
++    ramulator2_frontend->connect_memory_system(ramulator2_memorysystem);
++    ramulator2_memorysystem->connect_frontend(ramulator2_frontend);
++
++    stats_output_file->flush();
++    if (create_trace) {
++        trace_file->flush();
++    }
++
++    // if (system()->cacheLineSize() != wrapper.burstSize())
++    //     fatal("Ramulator2 burst size %d
++    //          does not match cache line size %d\n",
++    //           wrapper.burstSize(), system()->cacheLineSize());
++}
++
++void
++Ramulator2::startup()
++{
++    startTick = curTick();
++
++    // kick off the clock ticks
++    schedule(tickEvent, clockEdge());
++}
++
++void
++Ramulator2::resetStats() {
++    DPRINTF(Ramulator2, "Starting to write statistics\n");
++    ccprintf(*stats_output_file,
++        "==================== BEGIN RAMULATOR2 STATS ====================\n");
++    ccprintf(*stats_output_file, ramulator2_frontend->finalize());
++    ccprintf(*stats_output_file, ramulator2_memorysystem->finalize());
++    ccprintf(*stats_output_file,
++        "===================== END RAMULATOR2 STATS =====================\n");
++    stats_output_file->flush();
++    if (create_trace) {
++        trace_file->flush();
++    }
++    DPRINTF(Ramulator2, "Finished writing statistics\n");
++}
++
++void
++Ramulator2::sendResponse()
++{
++    assert(!retryResp);
++    assert(!responseQueue.empty());
++
++    DPRINTF(Ramulator2, "Attempting to send response\n");
++
++    bool success = port.sendTimingResp(responseQueue.front());
++    if (success) {
++        responseQueue.pop_front();
++
++        DPRINTF(Ramulator2,
++                "Have %d read, %d write, %d responses outstanding\n",
++                nbrOutstandingReads, nbrOutstandingWrites,
++                responseQueue.size());
++
++        if (!responseQueue.empty() && !sendResponseEvent.scheduled())
++            schedule(sendResponseEvent, curTick());
++
++        if (nbrOutstanding() == 0)
++            signalDrainDone();
++    } else {
++        retryResp = true;
++
++        DPRINTF(Ramulator2, "Waiting for response retry\n");
++
++        assert(!sendResponseEvent.scheduled());
++    }
++}
++
++unsigned int
++Ramulator2::nbrOutstanding() const
++{
++    return nbrOutstandingReads + nbrOutstandingWrites + responseQueue.size();
++}
++
++void
++Ramulator2::tick()
++{
++    // Only tick when it's timing mode
++    if (system()->isTimingMode()) {
++        ramulator2_memorysystem->tick();
++
++        // is the connected port waiting for a retry, if so check the
++        // state and send a retry if conditions have changed
++        if (retryReq) {
++            retryReq = false;
++            port.sendRetryReq();
++        }
++    }
++
++    schedule(tickEvent,
++        curTick()
++            + ramulator2_memorysystem->get_tCK() * sim_clock::as_float::ns);
++}
++
++Tick
++Ramulator2::recvAtomic(PacketPtr pkt)
++{
++    panic_if(pkt->cacheResponding(), "Should not see packets where cache "
++             "is responding");
++
++    access(pkt);
++    return 50000;   // Arbitary latency of 50ns
++}
++
++void
++Ramulator2::recvFunctional(PacketPtr pkt)
++{
++    pkt->pushLabel(name());
++    functionalAccess(pkt);
++
++    for (auto i = responseQueue.begin(); i != responseQueue.end(); ++i)
++        pkt->trySatisfyFunctional(*i);
++
++    pkt->popLabel();
++}
++
++bool
++Ramulator2::recvTimingReq(PacketPtr pkt)
++{
++    DPRINTF(Ramulator2, "recvTimingReq: request %s addr %#x size %d\n",
++            pkt->cmdString(), pkt->getAddr(), pkt->getSize());
++
++    panic_if(pkt->cacheResponding(), "Should not see packets where cache "
++             "is responding");
++
++    panic_if(!(pkt->isRead() || pkt->isWrite()),
++             "Should only see read and writes at memory controller, "
++             "saw %s to %#llx\n", pkt->cmdString(), pkt->getAddr());
++
++    // we should not get a new request after committing to retry the
++    // current one, but unfortunately the CPU violates this rule, so
++    // simply ignore it for now
++    if (retryReq)
++        return false;
++
++    bool enqueue_success = false;
++
++    int req_jdk_id = 0;
++    if (pkt->req->getIsGC()) {
++        req_jdk_id = 1;
++    } else if (pkt->req->getIsNonGC()) {
++        req_jdk_id = 2;
++    }
++    if (pkt->isRead())
++    {
++        // Generate ramulator READ request and
++        // try to send to ramulator's memory system
++        
++        // Removed task ID due to error.
++        enqueue_success = ramulator2_frontend->
++            receive_external_requests(0, pkt->getAddr(), 0,
++            [this](Ramulator::Request& req) {
++                DPRINTF(Ramulator2, "Read to %ld completed.\n", req.addr);
++                auto& pkt_q = outstandingReads.find(req.addr)->second;
++                PacketPtr pkt = pkt_q.front();
++                pkt_q.pop_front();
++                if (!pkt_q.size())
++                    outstandingReads.erase(req.addr);
++
++                // added counter to track requests in flight
++                --nbrOutstandingReads;
++
++                accessAndRespond(pkt);
++            }, req_jdk_id, pkt->req->hasVaddr() ? pkt->req->getVaddr() : -1,
++            retryReq); 
++
++        if (enqueue_success)
++        {
++            outstandingReads[pkt->getAddr()].push_back(pkt);
++
++            // we count a transaction as outstanding until it has left the
++            // queue in the controller, and the response has been sent
++            // back, note that this will differ for reads and writes
++            ++nbrOutstandingReads;
++        }
++        else
++        {
++            retryReq = true;
++        }
++    } else if (pkt->isWrite()) {
++        // Generate ramulator WRITE request and
++        // try to send to ramulator's memory system
++        enqueue_success = ramulator2_frontend->
++            receive_external_requests(1, pkt->getAddr(), 0,
++            [this](Ramulator::Request& req) {
++                DPRINTF(Ramulator2, "Write to %ld completed.\n", req.addr);
++                auto& pkt_q = outstandingWrites.find(req.addr)->second;
++                PacketPtr pkt = pkt_q.front();
++                pkt_q.pop_front();
++                if (!pkt_q.size())
++                    outstandingWrites.erase(req.addr);
++
++                // added counter to track requests in flight
++                --nbrOutstandingWrites;
++
++                accessAndRespond(pkt);
++            }, req_jdk_id, pkt->req->hasVaddr() ? pkt->req->getVaddr() : -1,
++            retryReq); 
++
++        if (enqueue_success)
++        {
++            outstandingWrites[pkt->getAddr()].push_back(pkt);
++
++            ++nbrOutstandingWrites;
++
++            // perform the access for writes
++            accessAndRespond(pkt);
++        }
++        else
++        {
++            retryReq = true;
++        }
++    } else {
++        // keep it simple and just respond if necessary
++        accessAndRespond(pkt);
++        return true;
++    }
++
++    return enqueue_success;
++}
++
++void
++Ramulator2::recvRespRetry()
++{
++    DPRINTF(Ramulator2, "Retrying\n");
++
++    assert(retryResp);
++    retryResp = false;
++    sendResponse();
++}
++
++void
++Ramulator2::accessAndRespond(PacketPtr pkt)
++{
++    DPRINTF(Ramulator2, "Access for address %lld\n", pkt->getAddr());
++
++    bool needsResponse = pkt->needsResponse();
++
++    access(pkt);
++
++    // turn packet around to go back to requestor if response expected
++    if (needsResponse) {
++        // access already turned the packet into a response
++        assert(pkt->isResponse());
++
++        // Assume frontend latency = 0
++        Tick time = curTick() + pkt->headerDelay + pkt->payloadDelay;
++        // Here we reset the timing of the packet before sending it out.
++        pkt->headerDelay = pkt->payloadDelay = 0;
++
++        DPRINTF(Ramulator2, "Queuing response for address %lld\n",
++                pkt->getAddr());
++
++        // queue it to be sent back
++        responseQueue.push_back(pkt);
++
++        // if we are not already waiting for a retry, or are scheduled
++        // to send a response, schedule an event
++        if (!retryResp && !sendResponseEvent.scheduled())
++            schedule(sendResponseEvent, time);
++    } else {
++        // queue the packet for deletion
++        pendingDelete.reset(pkt);
++    }
++}
++
++
++Port&
++Ramulator2::getPort(const std::string &if_name, PortID idx)
++{
++    if (if_name != "port") {
++        return ClockedObject::getPort(if_name, idx);
++    } else {
++        return port;
++    }
++}
++
++DrainState
++Ramulator2::drain()
++{
++    // check our outstanding reads and writes and if any they need to
++    // drain
++    return nbrOutstanding() != 0 ? DrainState::Draining : DrainState::Drained;
++}
++
++Ramulator2::MemorySystemPort::MemorySystemPort(const std::string& _name,
++                                 Ramulator2& _ramulator2)
++    : ResponsePort(_name), ramulator2(_ramulator2)
++{ }
++
++
++void
++Ramulator2::changeExecutionPhase(uint new_execution_phase) {
++    ramulator2_memorysystem->set_jdk_execution_phase(new_execution_phase);
++}
++
++
++} // namespace memory
++} // namespace gem5
++
++#pragma pop_macro("warn")
+diff --git a/src/mem/ramulator2.hh b/src/mem/ramulator2.hh
+new file mode 100644
+index 0000000000..96e6b6e510
+--- /dev/null
++++ b/src/mem/ramulator2.hh
+@@ -0,0 +1,164 @@
++#ifndef __MEM_RAMULATOR2_HH__
++#define __MEM_RAMULATOR2_HH__
++
++#include <deque>
++#include <functional>
++#include <unordered_map>
++
++#include "mem/abstract_mem.hh"
++#include "params/Ramulator2.hh"
++
++
++#include <zfstream.h>
++
++// Forward declare Ramulator2 top-level components
++namespace Ramulator
++{
++  class IFrontEnd;
++  class IMemorySystem;
++}
++
++
++namespace gem5
++{
++
++namespace memory
++{
++
++
++class Ramulator2 : public AbstractMemory
++{
++  private:
++    class MemorySystemPort : public ResponsePort
++    {
++
++      private:
++        Ramulator2& ramulator2;
++
++      public:
++        MemorySystemPort(const std::string& _name, Ramulator2& _ramulator2);
++
++      protected:
++        Tick recvAtomic(PacketPtr pkt) override {
++            return ramulator2.recvAtomic(pkt);
++        };
++
++        void recvFunctional(PacketPtr pkt) override {
++            ramulator2.recvFunctional(pkt);
++        };
++
++        bool recvTimingReq(PacketPtr pkt) override {
++            return ramulator2.recvTimingReq(pkt);
++        };
++        void recvRespRetry() override { ramulator2.recvRespRetry(); };
++
++        AddrRangeList getAddrRanges() const override
++        {
++          AddrRangeList ranges;
++          ranges.push_back(ramulator2.getAddrRange());
++          return ranges;
++        };
++    };
++
++    MemorySystemPort port;
++
++    std::string config_path;
++    Ramulator::IFrontEnd* ramulator2_frontend;
++    Ramulator::IMemorySystem* ramulator2_memorysystem;
++
++    
++    std::string output_path;
++    std::string trace_path;
++    bool create_trace;
++    std::ostream* stats_output_file;
++    std::ostream* trace_file;
++
++    // std::function<void(Ramulator::Request&)> read_callback;
++    // std::function<void(Ramulator::Request&)> write_callback;
++    bool retryReq;
++    bool retryResp;
++    Tick startTick;
++    std::unordered_map<Addr, std::deque<PacketPtr>> outstandingReads;
++    std::unordered_map<Addr, std::deque<PacketPtr>> outstandingWrites;
++
++    /**
++     * Count the number of outstanding transactions so that we can
++     * block any further requests until there is space in Ramulator2 and
++     * the sending queue we need to buffer the response packets.
++     */
++    unsigned int nbrOutstandingReads;
++    unsigned int nbrOutstandingWrites;
++
++    /**
++     * Queue to hold response packets until we can send them
++     * back. This is needed as Ramulator2 unconditionally passes
++     * responses back without any flow control.
++     */
++    std::deque<PacketPtr> responseQueue;
++
++
++    unsigned int nbrOutstanding() const;
++
++    /**
++     * When a packet is ready, use the "access()" method in
++     * AbstractMemory to actually create the response packet, and send
++     * it back to the outside world requestor.
++     *
++     * @param pkt The packet from the outside world
++     */
++    void accessAndRespond(PacketPtr pkt);
++
++    void sendResponse();
++
++    /**
++     * Event to schedule sending of responses
++     */
++    EventFunctionWrapper sendResponseEvent;
++
++    /**
++     * Progress the controller one clock cycle.
++     */
++    void tick();
++
++    /**
++     * Event to schedule clock ticks
++     */
++    EventFunctionWrapper tickEvent;
++
++    /**
++     * Upstream caches need this packet until true is returned, so
++     * hold it for deletion until a subsequent call
++     */
++    std::unique_ptr<Packet> pendingDelete;
++
++  public:
++
++    typedef Ramulator2Params Params;
++    Ramulator2(const Params &p);
++
++    DrainState drain() override;
++
++    virtual Port& getPort(const std::string& if_name,
++                          PortID idx = InvalidPortID) override;
++
++    void init() override;
++    void startup() override;
++
++    void resetStats() override;
++
++    
++    void changeExecutionPhase(uint new_execution_phase);
++
++  protected:
++
++    Tick recvAtomic(PacketPtr pkt);
++    void recvFunctional(PacketPtr pkt);
++    bool recvTimingReq(PacketPtr pkt);
++    void recvRespRetry();
++
++};
++
++} // namespace memory
++} // namespace gem5
++
++#endif // __MEM_RAMULATOR2_HH__
+diff --git a/src/mem/request.hh b/src/mem/request.hh
+index d4e81d124d..0e1af48469 100644
+--- a/src/mem/request.hh
++++ b/src/mem/request.hh
+@@ -490,7 +490,7 @@ class Request : public Extensible<Request>
+      * These fields are adequate to perform a request.
+      */
+     Request(Addr paddr, unsigned size, Flags flags, RequestorID id) :
+-        _paddr(paddr), _size(size), _requestorId(id), _time(curTick())
++            _paddr(paddr), _size(size), _requestorId(id), _time(curTick())
+     {
+         _flags.set(flags);
+         privateFlags.set(VALID_PADDR|VALID_SIZE);
+@@ -508,6 +508,7 @@ class Request : public Extensible<Request>
+         _isGPUFuncAccess = false;
+     }
+ 
++    
+     Request(const Request& other)
+         : Extensible<Request>(other),
+           _paddr(other._paddr), _size(other._size),
+@@ -1139,6 +1140,32 @@ class Request : public Extensible<Request>
+     {
+         return _isGPUFuncAccess;
+     }
++
++  private:
++    
++    bool _isGC = false;
++    bool _isNonGC = false;
++    bool _isJdk = false;
++    bool _isJdkLoad = false;
++
++  public:
++    
++    bool getIsGC() { return _isGC; }
++    bool getIsNonGC() { return _isNonGC; }
++    bool getIsJdk() { return _isJdk; }
++    bool getIsJdkLoad() { return _isJdkLoad; }
++
++    void setIsGC(bool isGC) {
++        _isGC = isGC;
++        _isJdk = _isGC || _isNonGC;
++    }
++    void setIsNonGC(bool isNonGC) {
++        _isNonGC = isNonGC;
++        _isJdk = _isGC || _isNonGC;
++    }
++    // void setIsJdk() { _isJdk = _isGC || _isNonGC; }
++    void setIsJdkLoad(bool isJdkLoad) { _isJdkLoad = isJdkLoad; }
++
+ };
+ 
+ } // namespace gem5
+diff --git a/src/mem/ruby/protocol/MESI_Three_Level-L0cache.sm b/src/mem/ruby/protocol/MESI_Three_Level-L0cache.sm
+index aa93046359..6b391d580a 100644
+--- a/src/mem/ruby/protocol/MESI_Three_Level-L0cache.sm
++++ b/src/mem/ruby/protocol/MESI_Three_Level-L0cache.sm
+@@ -162,6 +162,16 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     DataBlock DataBlk,       desc="data for the block";
+     bool Dirty, default="false",   desc="data is dirty";
+     bool isPrefetched, default="false", desc="Set if this block was prefetched";
++
++    
++    bool isJdk, default="false", desc="If flag is set, line is of interest to JDK";
++    bool isAllocatedByGC, default="false", desc="If flag is set, line was allocated for GC demand request";
++    bool isAllocatedByNonGC, default="false", desc="If flag is set, line was allocated for GC demand request";
++    bool isOnceAccessedByGC, default="false", desc="If flag is set, line was accessed once by GC demand requests";
++    bool isOnceAccessedByNonGC, default="false", desc="If flag is set, line was accessed once by Non GC demand requests";
++
++    void jdkWipe();
++    void jdkInit(bool, bool, bool);
+   }
+ 
+   // TBE fields
+@@ -583,6 +593,29 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+ 
+   // ACTIONS
+   action(a_issueGETS, "a", desc="Issue GETS") {
++    peek(mandatoryQueue_in, RubyRequest) {
++      enqueue(requestNetwork_out, CoherenceMsg, request_latency) {
++        out_msg.addr := address;
++        out_msg.Class := CoherenceClass:GETS;
++        out_msg.Sender := machineID;
++        out_msg.Dest := createMachineID(MachineType:L1Cache, version);
++
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
++                address, out_msg.Dest);
++        out_msg.MessageSize := MessageSizeType:Control;
++        out_msg.AccessMode := in_msg.AccessMode;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  
++  action(a_issueInstGETS, "ai", desc="Issue instruction GETS") {
+     peek(mandatoryQueue_in, RubyRequest) {
+       enqueue(requestNetwork_out, CoherenceMsg, request_latency) {
+         out_msg.addr := address;
+@@ -606,10 +639,16 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+         DPRINTF(RubySlicc, "%s\n", machineID);
+         out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+ 
+-        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
+                 address, out_msg.Dest);
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -622,10 +661,16 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+         out_msg.Sender := machineID;
+         out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+ 
+-        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
+                 address, out_msg.Dest);
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -640,6 +685,13 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+       out_msg.Sender := machineID;
+       out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+       out_msg.MessageSize := MessageSizeType:Writeback_Data;
++      
++      peek(messgeBuffer_in, CoherenceMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+     cache_entry.Dirty := false;
+   }
+@@ -652,6 +704,11 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+         out_msg.Sender := machineID;
+         out_msg.Dest := createMachineID(MachineType:L1Cache, version);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -663,7 +720,35 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     }
+   }
+ 
++  
+   action(g_issuePUTX, "g", desc="Relinquish line to the L1 cache") {
++    enqueue(requestNetwork_out, CoherenceMsg, response_latency) {
++      assert(is_valid(cache_entry));
++      out_msg.addr := address;
++      out_msg.Class := CoherenceClass:PUTX;
++      out_msg.Dirty := cache_entry.Dirty;
++      out_msg.Sender:= machineID;
++      out_msg.Dest := createMachineID(MachineType:L1Cache, version);
++
++      if (cache_entry.Dirty) {
++        out_msg.MessageSize := MessageSizeType:Writeback_Data;
++        out_msg.DataBlk := cache_entry.DataBlk;
++      } else {
++        out_msg.MessageSize := MessageSizeType:Writeback_Control;
++      }
++
++      peek(mandatoryQueue_in, RubyRequest) {
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  
++  action(g_issuePUTX_PF, "gpf", desc="Relinquish line to the L1 cache due to prefetcher") {
+     enqueue(requestNetwork_out, CoherenceMsg, response_latency) {
+       assert(is_valid(cache_entry));
+       out_msg.addr := address;
+@@ -792,12 +877,16 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     if (is_invalid(cache_entry)) {
+       set_cache_entry(Dcache.allocate(address, new Entry));
+     }
++    
++    cache_entry.jdkWipe();
+   }
+ 
+   action(pp_allocateICacheBlock, "\p", desc="Set L1 I-cache tag equal to tag of block B") {
+     if (is_invalid(cache_entry)) {
+       set_cache_entry(Icache.allocate(address, new Entry));
+     }
++    
++    cache_entry.jdkWipe();
+   }
+ 
+   action(z_stallAndWaitMandatoryQueue, "\z", desc="Stall cpu request queue") {
+@@ -829,6 +918,32 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     Dcache.profileDemandHit();
+   }
+ 
++  
++  action(jdk_profileDataMiss, "\rdm", desc="Profile the JDK demand miss") {
++    peek(mandatoryQueue_in, RubyRequest) {
++      Dcache.profileJdkDemandMiss(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      Dcache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_profileDataHit, "\rdh", desc="Profile the JDK demand hit") {
++    peek(mandatoryQueue_in, RubyRequest) {
++      Dcache.profileJdkDemandHit(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      Dcache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_initDataCacheBlock, "\rdi", desc="Mark JDK flags in allocated line") {
++    peek(mandatoryQueue_in, RubyRequest) {
++      cache_entry.jdkInit(in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      Dcache.profileJdkInit(address, cache_entry);
++    }
++  }
++
++
++
+   // store conditionals
+ 
+   action(hhc_storec_fail, "\hc",
+@@ -944,19 +1059,27 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   // Transitions from Idle
+   transition(I, Load, IS) {
+     oo_allocateDCacheBlock;
++    
++    jdk_initDataCacheBlock;
+     i_allocateTBE;
+     a_issueGETS;
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     po_observeMiss;
+     k_popMandatoryQueue;
+   }
+ 
+   transition(I, Load_Linked, IS) {
+     oo_allocateDCacheBlock;
++    
++    jdk_initDataCacheBlock;
+     i_allocateTBE;
+     ll_markLoadLinked;
+     b_issueGETX;
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     po_observeMiss;
+     k_popMandatoryQueue;
+   }
+@@ -964,7 +1087,7 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition(I, Ifetch, Inst_IS) {
+     pp_allocateICacheBlock;
+     i_allocateTBE;
+-    a_issueGETS;
++    a_issueInstGETS;
+     uu_profileInstMiss;
+     po_observeMiss;
+     k_popMandatoryQueue;
+@@ -972,9 +1095,13 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+ 
+   transition(I, Store, IM) {
+     oo_allocateDCacheBlock;
++    
++    jdk_initDataCacheBlock;
+     i_allocateTBE;
+     b_issueGETX;
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     po_observeMiss;
+     k_popMandatoryQueue;
+   }
+@@ -995,6 +1122,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition({S,E,M}, Load) {
+     h_load_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     k_popMandatoryQueue;
+   }
+@@ -1010,6 +1139,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     i_allocateTBE;
+     c_issueUPGRADE;
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     k_popMandatoryQueue;
+   }
+ 
+@@ -1018,12 +1149,16 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+     ll_markLoadLinked;
+     c_issueUPGRADE;
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     k_popMandatoryQueue;
+   }
+ 
+   transition(E, Load_Linked, LLSC_E) {
+     h_load_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     ll_scheduleLoadLinkedLockTimeout;
+     k_popMandatoryQueue;
+@@ -1045,16 +1180,25 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition({E,M}, Store, M) {
+     hh_store_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     k_popMandatoryQueue;
+   }
+ 
+-  transition(E, {L0_Replacement,PF_L0_Replacement}, I) {
++  transition(E, L0_Replacement, I) {
+     forward_eviction_to_cpu;
+     g_issuePUTX;
+     ff_deallocateCacheBlock;
+   }
+ 
++  
++  transition(E, PF_L0_Replacement, I) {
++    forward_eviction_to_cpu;
++    g_issuePUTX_PF;
++    ff_deallocateCacheBlock;
++  }
++
+   transition(E, {InvOwn, InvElse, Fwd_GETX}, I) {
+     // don't send data
+     forward_eviction_to_cpu;
+@@ -1069,12 +1213,19 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   }
+ 
+   // Transitions from Modified
+-  transition(M, {L0_Replacement,PF_L0_Replacement}, I) {
++  transition(M, L0_Replacement, I) {
+     forward_eviction_to_cpu;
+     g_issuePUTX;
+     ff_deallocateCacheBlock;
+   }
+ 
++  
++  transition(M, PF_L0_Replacement, I) {
++    forward_eviction_to_cpu;
++    g_issuePUTX_PF;
++    ff_deallocateCacheBlock;
++  }
++
+   transition(M, {InvOwn, InvElse, Fwd_GETX}, I) {
+     forward_eviction_to_cpu;
+     f_sendDataToL1;
+@@ -1090,6 +1241,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition(M, Load_Linked, LLSC_M) {
+     h_load_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     ll_scheduleLoadLinkedLockTimeout;
+     k_popMandatoryQueue;
+@@ -1208,6 +1361,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+ 
+   transition(PF_IS, Load, IS) {
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     ppm_observePfMiss;
+     k_popMandatoryQueue;
+   }
+@@ -1234,6 +1389,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+ 
+   transition(PF_IE, Store, IM) {
+     uu_profileDataMiss;
++    
++    jdk_profileDataMiss;
+     ppm_observePfMiss;
+     k_popMandatoryQueue;
+   }
+@@ -1301,6 +1458,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition({LLSC_E, LLSC_M}, {Load, Load_Linked}) {
+     h_load_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     k_popMandatoryQueue;
+   }
+@@ -1315,6 +1474,8 @@ machine(MachineType:L0Cache, "MESI Directory L0 Cache")
+   transition({LLSC_E, LLSC_M}, Store, LLSC_M) {
+     hh_store_hit;
+     uu_profileDataHit;
++    
++    jdk_profileDataHit;
+     pph_observePfHit;
+     k_popMandatoryQueue;
+   }
+diff --git a/src/mem/ruby/protocol/MESI_Three_Level-L1cache.sm b/src/mem/ruby/protocol/MESI_Three_Level-L1cache.sm
+index c7a1ae585a..cb1e4acd9b 100644
+--- a/src/mem/ruby/protocol/MESI_Three_Level-L1cache.sm
++++ b/src/mem/ruby/protocol/MESI_Three_Level-L1cache.sm
+@@ -147,6 +147,16 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+     State CacheState,        desc="cache state";
+     DataBlock DataBlk,       desc="data for the block";
+     bool Dirty, default="false",   desc="data is dirty";
++
++    
++    bool isJdk, default="false", desc="If flag is set, line is of interest to JDK";
++    bool isAllocatedByGC, default="false", desc="If flag is set, line was allocated for GC demand request";
++    bool isAllocatedByNonGC, default="false", desc="If flag is set, line was allocated for GC demand request";
++    bool isOnceAccessedByGC, default="false", desc="If flag is set, line was accessed once by GC demand requests";
++    bool isOnceAccessedByNonGC, default="false", desc="If flag is set, line was accessed once by Non GC demand requests";
++
++    void jdkWipe();
++    void jdkInit(bool, bool, bool);
+   }
+ 
+   // TBE fields
+@@ -418,11 +428,17 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         out_msg.Requestor := machineID;
+         out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+-        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
+                 address, out_msg.Destination);
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
+         out_msg.Prefetch := in_msg.Prefetch;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -436,11 +452,17 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         DPRINTF(RubySlicc, "%s\n", machineID);
+         out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+-        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
+                 address, out_msg.Destination);
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
+         out_msg.Prefetch := in_msg.Prefetch;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -453,11 +475,17 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         out_msg.Requestor := machineID;
+         out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+-        DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x, destination: %s\n",
+                 address, out_msg.Destination);
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
+         out_msg.Prefetch := in_msg.Prefetch;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -473,6 +501,11 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(in_msg.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Data;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -488,6 +521,13 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(requestNetwork_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -502,6 +542,11 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(in_msg.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Data;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -517,6 +562,13 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(requestNetwork_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -543,6 +595,13 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Writeback_Data;
++      
++      peek(requestNetwork_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -557,6 +616,13 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       out_msg.Destination.add(mapAddressToRange(address, MachineType:L2Cache,
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Writeback_Data;
++      
++      peek(requestNetwork_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -569,6 +635,11 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+         out_msg.Destination.add(in_msg.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
+         out_msg.AckCount := 1;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -593,6 +664,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       }
+   }
+ 
++  
+   action(g_issuePUTX, "g", desc="send data to the L2 cache") {
+     enqueue(requestNetwork_out, RequestMsg, l1_response_latency) {
+       assert(is_valid(cache_entry));
+@@ -608,6 +680,14 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+       } else {
+         out_msg.MessageSize := MessageSizeType:Writeback_Control;
+       }
++
++      peek(messageBufferFromL0_in, CoherenceMsg) {
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -620,6 +700,13 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Response_Control;
+       DPRINTF(RubySlicc, "%#x\n", address);
++      
++      peek(responseNetwork_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -632,11 +719,17 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+                           l2_select_low_bit, l2_select_num_bits, clusterID));
+       out_msg.MessageSize := MessageSizeType:Response_Control;
+       DPRINTF(RubySlicc, "%#x\n", address);
+-
++      
++      peek(responseNetwork_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+-  action(h_data_to_l0, "h", desc="If not prefetch, send data to the L0 cache.") {
++  action(h_data_to_l0_l0, "hlzero", desc="If not prefetch, send data to the L0 cache, pop l0.") {
+       enqueue(bufferToL0_out, CoherenceMsg, l1_response_latency) {
+           assert(is_valid(cache_entry));
+ 
+@@ -646,12 +739,43 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+           out_msg.Dest := createMachineID(MachineType:L0Cache, version);
+           out_msg.DataBlk := cache_entry.DataBlk;
+           out_msg.MessageSize := MessageSizeType:Response_Data;
++
++          
++          peek(messageBufferFromL0_in, CoherenceMsg) {
++            out_msg.requestIsGC := in_msg.requestIsGC;
++            out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++            out_msg.requestIsJdk := in_msg.requestIsJdk;
++            out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++          }
++      }
++
++      cache.setMRU(address);
++  }
++
++  action(h_data_to_l0_l2, "hltwo", desc="If not prefetch, send data to the L0 cache, pop l2.") {
++      enqueue(bufferToL0_out, CoherenceMsg, l1_response_latency) {
++          assert(is_valid(cache_entry));
++
++          out_msg.addr := address;
++          out_msg.Class := CoherenceClass:DATA;
++          out_msg.Sender := machineID;
++          out_msg.Dest := createMachineID(MachineType:L0Cache, version);
++          out_msg.DataBlk := cache_entry.DataBlk;
++          out_msg.MessageSize := MessageSizeType:Response_Data;
++
++          
++          peek(responseNetwork_in, ResponseMsg) {
++            out_msg.requestIsGC := in_msg.requestIsGC;
++            out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++            out_msg.requestIsJdk := in_msg.requestIsJdk;
++            out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++          }
+       }
+ 
+       cache.setMRU(address);
+   }
+ 
+-  action(hh_xdata_to_l0, "\h", desc="If not prefetch, notify sequencer that store completed.") {
++  action(hh_xdata_to_l0_l0, "\hlzero", desc="If not prefetch, notify sequencer that store completed, pop l0.") {
+       enqueue(bufferToL0_out, CoherenceMsg, l1_response_latency) {
+           assert(is_valid(cache_entry));
+ 
+@@ -664,6 +788,40 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+           out_msg.MessageSize := MessageSizeType:Response_Data;
+ 
+           //cache_entry.Dirty := true;
++
++          
++          peek(messageBufferFromL0_in, CoherenceMsg) {
++            out_msg.requestIsGC := in_msg.requestIsGC;
++            out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++            out_msg.requestIsJdk := in_msg.requestIsJdk;
++            out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++          }
++      }
++
++      cache.setMRU(address);
++  }
++
++  action(hh_xdata_to_l0_l2, "\hltwo", desc="If not prefetch, notify sequencer that store completed, pop l2.") {
++      enqueue(bufferToL0_out, CoherenceMsg, l1_response_latency) {
++          assert(is_valid(cache_entry));
++
++          out_msg.addr := address;
++          out_msg.Class := CoherenceClass:DATA_EXCLUSIVE;
++          out_msg.Sender := machineID;
++          out_msg.Dest := createMachineID(MachineType:L0Cache, version);
++          out_msg.DataBlk := cache_entry.DataBlk;
++          out_msg.Dirty := cache_entry.Dirty;
++          out_msg.MessageSize := MessageSizeType:Response_Data;
++
++          //cache_entry.Dirty := true;
++
++          
++          peek(responseNetwork_in, ResponseMsg) {
++            out_msg.requestIsGC := in_msg.requestIsGC;
++            out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++            out_msg.requestIsJdk := in_msg.requestIsJdk;
++            out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++          }
+       }
+ 
+       cache.setMRU(address);
+@@ -680,6 +838,14 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+           out_msg.DataBlk := cache_entry.DataBlk;
+           out_msg.Dirty := cache_entry.Dirty;
+           out_msg.MessageSize := MessageSizeType:Response_Data;
++
++          
++          peek(responseNetwork_in, ResponseMsg) {
++            out_msg.requestIsGC := in_msg.requestIsGC;
++            out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++            out_msg.requestIsJdk := in_msg.requestIsJdk;
++            out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++          }
+        }
+    }
+ 
+@@ -763,6 +929,8 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+     if (is_invalid(cache_entry)) {
+       set_cache_entry(cache.allocate(address, new Entry));
+     }
++    
++    cache_entry.jdkWipe();
+   }
+ 
+   action(z0_stallAndWaitL0Queue, "\z0", desc="recycle L0 request queue") {
+@@ -785,6 +953,30 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+     cache.profileDemandHit();
+   }
+ 
++  
++  action(jdk_profileMiss, "\rdm", desc="Profile the JDK demand miss") {
++    peek(messageBufferFromL0_in, CoherenceMsg) {
++      cache.profileJdkDemandMiss(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      cache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_profileHit, "\rdh", desc="Profile the JDK demand hit") {
++    peek(messageBufferFromL0_in, CoherenceMsg) {
++      cache.profileJdkDemandHit(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      cache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_initCacheBlock, "\rdi", desc="Mark JDK flags in allocated line") {
++    peek(messageBufferFromL0_in, CoherenceMsg) {
++      cache_entry.jdkInit(in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      cache.profileJdkInit(address, cache_entry);
++    }
++  }
++
+ 
+   //*****************************************************
+   // TRANSITIONS
+@@ -798,17 +990,25 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+ 
+   transition(I, Load, IS) {
+     oo_allocateCacheBlock;
++    
++    jdk_initCacheBlock;
+     i_allocateTBE;
+     a_issueGETS;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     k_popL0RequestQueue;
+   }
+ 
+   transition(I, Store, IM) {
+     oo_allocateCacheBlock;
++    
++    jdk_initCacheBlock;
+     i_allocateTBE;
+     b_issueGETX;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     k_popL0RequestQueue;
+   }
+ 
+@@ -819,8 +1019,10 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+ 
+   // Transitions from Shared
+   transition({S,SS}, Load, S) {
+-    h_data_to_l0;
++    h_data_to_l0_l0;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     k_popL0RequestQueue;
+   }
+ 
+@@ -828,6 +1030,8 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+     i_allocateTBE;
+     c_issueUPGRADE;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     k_popL0RequestQueue;
+   }
+ 
+@@ -852,8 +1056,10 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+   // Transitions from Exclusive
+ 
+   transition({EE,MM}, Store, M) {
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l0;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     k_popL0RequestQueue;
+   }
+ 
+@@ -960,7 +1166,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+ 
+   transition(IS, Data_all_Acks, S) {
+     u_writeDataFromL2Response;
+-    h_data_to_l0;
++    h_data_to_l0_l2;
+     s_deallocateTBE;
+     o_popL2ResponseQueue;
+     kd_wakeUpDependents;
+@@ -978,7 +1184,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+   transition(IS, DataS_fromL1, S) {
+     u_writeDataFromL2Response;
+     j_sendUnblock;
+-    h_data_to_l0;
++    h_data_to_l0_l2;
+     s_deallocateTBE;
+     o_popL2ResponseQueue;
+     kd_wakeUpDependents;
+@@ -997,7 +1203,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+   // directory is blocked when sending exclusive data
+   transition({IS,IS_I}, Data_Exclusive, E) {
+     u_writeDataFromL2Response;
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l2;
+     jj_sendExclusiveUnblock;
+     s_deallocateTBE;
+     o_popL2ResponseQueue;
+@@ -1018,7 +1224,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+ 
+   transition(IM, Data_all_Acks, M) {
+     u_writeDataFromL2Response;
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l2;
+     jj_sendExclusiveUnblock;
+     s_deallocateTBE;
+     o_popL2ResponseQueue;
+@@ -1032,7 +1238,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+ 
+   transition(SM, Ack_all, M) {
+     jj_sendExclusiveUnblock;
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l2;
+     s_deallocateTBE;
+     o_popL2ResponseQueue;
+     kd_wakeUpDependents;
+@@ -1103,24 +1309,30 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
+   // If a transaction has aborted, the L0 could re-request
+   // data which is in E or EE state in L1.
+   transition({EE,E}, Load, E) {
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l0;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     k_popL0RequestQueue;
+   }
+ 
+   // If a transaction has aborted, the L0 could re-request
+   // data which is in M or MM state in L1.
+   transition({MM,M}, Load, M) {
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l0;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     k_popL0RequestQueue;
+   }
+ 
+   // If a transaction has aborted, the L0 could re-request
+   // data which is in M state in L1.
+   transition({E,M}, Store, M) {
+-    hh_xdata_to_l0;
++    hh_xdata_to_l0_l0;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     k_popL0RequestQueue;
+   }
+ 
+diff --git a/src/mem/ruby/protocol/MESI_Three_Level-msg.sm b/src/mem/ruby/protocol/MESI_Three_Level-msg.sm
+index fe855f8e22..e6c6cf1e32 100644
+--- a/src/mem/ruby/protocol/MESI_Three_Level-msg.sm
++++ b/src/mem/ruby/protocol/MESI_Three_Level-msg.sm
+@@ -80,6 +80,12 @@ structure(CoherenceMsg, desc="...", interface="Message") {
+   bool Dirty, default="false",  desc="Dirty bit";
+   PrefetchBit Prefetch,         desc="Is this a prefetch request";
+ 
++  
++  bool requestIsGC,             default="false",desc="If flag is set, request is GC";
++  bool requestIsNonGC,          default="false",desc="If flag is set, request is non GC";
++  bool requestIsJdk,          default="false",desc="If flag is set, request is of interest to JDK";
++  bool requestIsJdkLoad,      default="false",desc="If flag is set, request is load otherwise it is store";
++
+   bool functionalRead(Packet *pkt) {
+     // Valid data block is only present in message with following types
+     if (Class == CoherenceClass:PUTX ||
+diff --git a/src/mem/ruby/protocol/MESI_Two_Level-L2cache.sm b/src/mem/ruby/protocol/MESI_Two_Level-L2cache.sm
+index 1562db17e9..ad43d0bcac 100644
+--- a/src/mem/ruby/protocol/MESI_Two_Level-L2cache.sm
++++ b/src/mem/ruby/protocol/MESI_Two_Level-L2cache.sm
+@@ -137,6 +137,16 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     MachineID Exclusive,          desc="Exclusive holder of block";
+     DataBlock DataBlk,       desc="data for the block";
+     bool Dirty, default="false", desc="data is dirty";
++
++    
++    bool isJdk, default="false", desc="If flag is set, line is of interest to JDK";
++    bool isAllocatedByGC, default="false", desc="If flag is set, line was allocated for GC demand request";
++    bool isAllocatedByNonGC, default="false", desc="If flag is set, line was allocated for Non GC demand request";
++    bool isOnceAccessedByGC, default="false", desc="If flag is set, line was accessed once by GC demand requests";
++    bool isOnceAccessedByNonGC, default="false", desc="If flag is set, line was accessed once by Non GC demand requests";
++
++    void jdkWipe();
++    void jdkInit(bool, bool, bool);
+   }
+ 
+   // TBE fields
+@@ -421,6 +431,12 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.MessageSize := MessageSizeType:Control;
+         out_msg.AccessMode := in_msg.AccessMode;
+         out_msg.Prefetch := in_msg.Prefetch;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -434,10 +450,17 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.Requestor := in_msg.Requestor;
+         out_msg.Destination.add(cache_entry.Exclusive);
+         out_msg.MessageSize := MessageSizeType:Request_Control;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+ 
++  
+   action(c_exclusiveReplacement, "c", desc="Send data to memory") {
+     enqueue(responseL2Network_out, ResponseMsg, l2_response_latency) {
+       assert(is_valid(cache_entry));
+@@ -448,6 +471,49 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.DataBlk := cache_entry.DataBlk;
+       out_msg.Dirty := cache_entry.Dirty;
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      peek(L1RequestL2Network_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  
++  action(c_exclusiveReplacement_mem, "cmem", desc="Send data to memory") {
++    enqueue(responseL2Network_out, ResponseMsg, l2_response_latency) {
++      assert(is_valid(cache_entry));
++      out_msg.addr := address;
++      out_msg.Type := CoherenceResponseType:MEMORY_DATA;
++      out_msg.Sender := machineID;
++      out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
++      out_msg.DataBlk := cache_entry.DataBlk;
++      out_msg.Dirty := cache_entry.Dirty;
++      out_msg.MessageSize := MessageSizeType:Response_Data;
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  action(c_exclusiveCleanReplacement_ack, "cca", desc="Send ack to memory for clean replacement with ack pop") {
++    enqueue(responseL2Network_out, ResponseMsg, l2_response_latency) {
++      out_msg.addr := address;
++      out_msg.Type := CoherenceResponseType:ACK;
++      out_msg.Sender := machineID;
++      out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
++      out_msg.MessageSize := MessageSizeType:Response_Control;
++      
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -458,6 +524,13 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.Sender := machineID;
+       out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
+       out_msg.MessageSize := MessageSizeType:Response_Control;
++      
++      peek(L1RequestL2Network_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -471,6 +544,13 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.DataBlk := tbe.DataBlk;
+       out_msg.Dirty := tbe.Dirty;
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -489,6 +569,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         if (cache_entry.Sharers.isElement(in_msg.Requestor)) {
+           out_msg.AckCount := out_msg.AckCount + 1;
+         }
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -508,6 +593,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         if (cache_entry.Sharers.isElement(in_msg.Requestor)) {
+           out_msg.AckCount := out_msg.AckCount + 1;
+         }
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -523,6 +613,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.DataBlk := cache_entry.DataBlk;
+         out_msg.MessageSize := MessageSizeType:Response_Data;
+         out_msg.AckCount := 0;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -538,6 +633,13 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.Destination := tbe.L1_GetS_IDs;  // internal nodes
+       out_msg.DataBlk := cache_entry.DataBlk;
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -552,6 +654,13 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.Destination := tbe.L1_GetS_IDs;  // internal nodes
+       out_msg.DataBlk := cache_entry.DataBlk;
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -568,9 +677,17 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       DPRINTF(RubySlicc, "Address: %#x, Destination: %s, DataBlock: %s\n",
+               out_msg.addr, out_msg.Destination, out_msg.DataBlk);
+       out_msg.MessageSize := MessageSizeType:Response_Data;
++      
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
++  
+   action(f_sendInvToSharers, "f", desc="invalidate sharers for L2 replacement") {
+     enqueue(L1RequestL2Network_out, RequestMsg, to_l1_latency) {
+       assert(is_valid(cache_entry));
+@@ -579,6 +696,30 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+       out_msg.Requestor := machineID;
+       out_msg.Destination := cache_entry.Sharers;
+       out_msg.MessageSize := MessageSizeType:Request_Control;
++      peek(L1RequestL2Network_in, RequestMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  
++  action(f_sendInvToSharers_mem, "fmem", desc="invalidate sharers for L2 replacement") {
++    enqueue(L1RequestL2Network_out, RequestMsg, to_l1_latency) {
++      assert(is_valid(cache_entry));
++      out_msg.addr := address;
++      out_msg.Type := CoherenceRequestType:INV;
++      out_msg.Requestor := machineID;
++      out_msg.Destination := cache_entry.Sharers;
++      out_msg.MessageSize := MessageSizeType:Request_Control;
++      peek(responseL2Network_in, ResponseMsg) {
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
+     }
+   }
+ 
+@@ -591,6 +732,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.Requestor := in_msg.Requestor;
+         out_msg.Destination := cache_entry.Sharers;
+         out_msg.MessageSize := MessageSizeType:Request_Control;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -605,6 +751,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.Destination := cache_entry.Sharers;
+         out_msg.Destination.remove(in_msg.Requestor);
+         out_msg.MessageSize := MessageSizeType:Request_Control;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -701,6 +852,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     if (is_invalid(cache_entry)) {
+       set_cache_entry(L2cache.allocate(address, new Entry));
+     }
++    
++    cache_entry.jdkWipe();
+   }
+ 
+   action(rr_deallocateL2CacheBlock, "\r", desc="Deallocate L2 cache block.  Sets the cache to not present, allowing a replacement in parallel with a fetch.") {
+@@ -716,6 +869,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(in_msg.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -731,6 +889,11 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+         out_msg.MessageSize := MessageSizeType:Response_Control;
+         // upgrader doesn't get ack from itself, hence the + 1
+         out_msg.AckCount := 0 - cache_entry.Sharers.count() + 1;
++        
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -743,6 +906,30 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     L2cache.profileDemandHit();
+   }
+ 
++  
++  action(jdk_profileMiss, "\rdm", desc="Profile the JDK demand miss") {
++    peek(L1RequestL2Network_in, RequestMsg) {
++      L2cache.profileJdkDemandMiss(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      L2cache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_profileHit, "\rdh", desc="Profile the JDK demand hit") {
++    peek(L1RequestL2Network_in, RequestMsg) {
++      L2cache.profileJdkDemandHit(address, in_msg.requestIsJdk, in_msg.requestIsJdkLoad, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      L2cache.profileJdkAccess(address, in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC, cache_entry);
++    }
++  }
++
++  
++  action(jdk_initCacheBlock, "\rdi", desc="Mark JDK flags in allocated line") {
++    peek(L1RequestL2Network_in, RequestMsg) {
++      cache_entry.jdkInit(in_msg.requestIsJdk, in_msg.requestIsGC, in_msg.requestIsNonGC);
++      L2cache.profileJdkInit(address, cache_entry);
++    }
++  }
++
+   action(nn_addSharer, "\n", desc="Add L1 sharer to list") {
+     peek(L1RequestL2Network_in, RequestMsg) {
+       assert(is_valid(cache_entry));
+@@ -841,34 +1028,46 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+ 
+   transition(NP, L1_GETS,  ISS) {
+     qq_allocateL2CacheBlock;
++    
++    jdk_initCacheBlock;
+     ll_clearSharers;
+     nn_addSharer;
+     i_allocateTBE;
+     ss_recordGetSL1ID;
+     a_issueFetchToMemory;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     jj_popL1RequestQueue;
+   }
+ 
+   transition(NP, L1_GET_INSTR, IS) {
+     qq_allocateL2CacheBlock;
++    
++    jdk_initCacheBlock;
+     ll_clearSharers;
+     nn_addSharer;
+     i_allocateTBE;
+     ss_recordGetSL1ID;
+     a_issueFetchToMemory;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     jj_popL1RequestQueue;
+   }
+ 
+   transition(NP, L1_GETX, IM) {
+     qq_allocateL2CacheBlock;
++    
++    jdk_initCacheBlock;
+     ll_clearSharers;
+     // nn_addSharer;
+     i_allocateTBE;
+     xx_recordGetXL1ID;
+     a_issueFetchToMemory;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -901,6 +1100,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     nn_addSharer;
+     ss_recordGetSL1ID;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -918,6 +1119,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     nn_addSharer;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -928,6 +1131,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     fwm_sendFwdInvToSharersMinusRequestor;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -936,6 +1141,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     ts_sendInvAckToUpgrader;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -945,17 +1152,27 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     rr_deallocateL2CacheBlock;
+   }
+ 
+-  transition(SS, {L2_Replacement, MEM_Inv}, S_I) {
++  
++  transition(SS, L2_Replacement, S_I) {
+     i_allocateTBE;
+     f_sendInvToSharers;
+     rr_deallocateL2CacheBlock;
+   }
+ 
++  
++  transition(SS, MEM_Inv, S_I) {
++    i_allocateTBE;
++    f_sendInvToSharers_mem;
++    rr_deallocateL2CacheBlock;
++  }
++
+ 
+   transition(M, L1_GETX, MT_MB) {
+     d_sendDataToRequestor;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -964,6 +1181,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     nn_addSharer;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+@@ -971,15 +1190,25 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+     dd_sendExclusiveDataToRequestor;
+     set_setMRU;
+     uu_profileHit;
++    
++    jdk_profileHit;
+     jj_popL1RequestQueue;
+   }
+ 
+-  transition(M, {L2_Replacement, MEM_Inv}, M_I) {
++  
++  transition(M, L2_Replacement, M_I) {
+     i_allocateTBE;
+     c_exclusiveReplacement;
+     rr_deallocateL2CacheBlock;
+   }
+ 
++  
++  transition(M, MEM_Inv, M_I) {
++    i_allocateTBE;
++    c_exclusiveReplacement_mem;
++    rr_deallocateL2CacheBlock;
++  }
++
+   transition(M, L2_Replacement_clean, M_I) {
+     i_allocateTBE;
+     c_exclusiveCleanReplacement;
+@@ -992,6 +1221,8 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+   transition(MT, L1_GETX, MT_MB) {
+     b_forwardRequestToExclusive;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     set_setMRU;
+     jj_popL1RequestQueue;
+   }
+@@ -1000,16 +1231,26 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+   transition(MT, {L1_GETS, L1_GET_INSTR}, MT_IIB) {
+     b_forwardRequestToExclusive;
+     uu_profileMiss;
++    
++    jdk_profileMiss;
+     set_setMRU;
+     jj_popL1RequestQueue;
+   }
+ 
+-  transition(MT, {L2_Replacement, MEM_Inv}, MT_I) {
++  
++  transition(MT, L2_Replacement, MT_I) {
+     i_allocateTBE;
+     f_sendInvToSharers;
+     rr_deallocateL2CacheBlock;
+   }
+ 
++  
++  transition(MT, MEM_Inv, MT_I) {
++    i_allocateTBE;
++    f_sendInvToSharers_mem;
++    rr_deallocateL2CacheBlock;
++  }
++
+   transition(MT, L2_Replacement_clean, MCT_I) {
+     i_allocateTBE;
+     f_sendInvToSharers;
+@@ -1067,7 +1308,7 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+   }
+ 
+   transition(I_I, Ack_all, M_I) {
+-    c_exclusiveCleanReplacement;
++    c_exclusiveCleanReplacement_ack;
+     o_popIncomingResponseQueue;
+   }
+ 
+@@ -1078,7 +1319,7 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
+   }
+ 
+   transition(MCT_I, {WB_Data_clean, Ack_all}, M_I) {
+-    c_exclusiveCleanReplacement;
++    c_exclusiveCleanReplacement_ack;
+     o_popIncomingResponseQueue;
+   }
+ 
+diff --git a/src/mem/ruby/protocol/MESI_Two_Level-dir.sm b/src/mem/ruby/protocol/MESI_Two_Level-dir.sm
+index 0b9a66547a..cf1a7adc78 100644
+--- a/src/mem/ruby/protocol/MESI_Two_Level-dir.sm
++++ b/src/mem/ruby/protocol/MESI_Two_Level-dir.sm
+@@ -260,6 +260,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(in_msg.Sender);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -277,6 +283,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+ 
+         Entry e := getDirectoryEntry(in_msg.addr);
+         e.Owner := in_msg.OriginalRequestorMachId;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -290,6 +302,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(in_msg.OriginalRequestorMachId);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -318,6 +336,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Sender := in_msg.Requestor;
+         out_msg.MessageSize := MessageSizeType:Request_Control;
+         out_msg.Len := 0;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -331,6 +355,32 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.MessageSize := MessageSizeType:Writeback_Data;
+         out_msg.DataBlk := in_msg.DataBlk;
+         out_msg.Len := 0;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
++
++  
++  action(qw_queueMemoryWBRequestDMA, "qwd", desc="Queue off-chip DMA writeback request") {
++    peek(responseNetwork_in, ResponseMsg) {
++      enqueue(memQueue_out, MemoryMsg, to_mem_ctrl_latency) {
++        out_msg.addr := address;
++        out_msg.Type := MemoryRequestType:MEMORY_WB;
++        out_msg.Sender := in_msg.Sender;
++        out_msg.MessageSize := MessageSizeType:Writeback_Data;
++        out_msg.DataBlk := in_msg.DataBlk;
++        out_msg.Len := 0;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -344,6 +394,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Sender := in_msg.Requestor;
+         out_msg.MessageSize := MessageSizeType:Request_Control;
+         out_msg.Len := 0;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -361,6 +417,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.DataBlk := in_msg.DataBlk;   // we send the entire data block and rely on the dma controller to split it up if need be
+         out_msg.Destination.add(tbe.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Data;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -375,6 +437,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.MessageSize := MessageSizeType:Writeback_Data;
+         out_msg.DataBlk := in_msg.DataBlk;
+         out_msg.Len := in_msg.Len;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -386,6 +454,14 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Type := CoherenceResponseType:ACK;
+         out_msg.Destination.add(tbe.Requestor);
+         out_msg.MessageSize := MessageSizeType:Writeback_Control;
++        
++        peek(memQueue_in, MemoryMsg) {
++          DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++          out_msg.requestIsGC := in_msg.requestIsGC;
++          out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++          out_msg.requestIsJdk := in_msg.requestIsJdk;
++          out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++        }
+       }
+   }
+ 
+@@ -405,10 +481,33 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.Sender := machineID;
+         out_msg.Destination.add(getDirectoryEntry(address).Owner);
+         out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+ 
++  action(inv_sendCacheInvalidateDMA, "invd", desc="Invalidate a cache block") {
++    peek(requestNetwork_in, RequestMsg) {
++      enqueue(responseNetwork_out, ResponseMsg, directory_latency) {
++        out_msg.addr := address;
++        out_msg.Type := CoherenceResponseType:INV;
++        out_msg.Sender := machineID;
++        out_msg.Destination.add(getDirectoryEntry(address).Owner);
++        out_msg.MessageSize := MessageSizeType:Response_Control;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
++      }
++    }
++  }
+ 
+   action(drp_sendDMAData, "drp", desc="Send Data to DMA controller from incoming PUTX") {
+     peek(responseNetwork_in, ResponseMsg) {
+@@ -419,6 +518,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.DataBlk := in_msg.DataBlk;   // we send the entire data block and rely on the dma controller to split it up if need be
+         out_msg.Destination.add(tbe.Requestor);
+         out_msg.MessageSize := MessageSizeType:Response_Data;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -444,6 +549,12 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+         out_msg.MessageSize := MessageSizeType:Writeback_Data;
+         out_msg.DataBlk := tbe.DataBlk;
+         out_msg.Len := tbe.Len;
++        
++        DPRINTF(RubySlicc, "JDKINFO: address: %#x\n", out_msg.addr);
++        out_msg.requestIsGC := in_msg.requestIsGC;
++        out_msg.requestIsNonGC := in_msg.requestIsNonGC;
++        out_msg.requestIsJdk := in_msg.requestIsJdk;
++        out_msg.requestIsJdkLoad := in_msg.requestIsJdkLoad;
+       }
+     }
+   }
+@@ -528,14 +639,14 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+ 
+   transition(M, DMA_READ, M_DRD) {
+     v_allocateTBE;
+-    inv_sendCacheInvalidate;
++    inv_sendCacheInvalidateDMA; 
+     j_popIncomingRequestQueue;
+   }
+ 
+   transition(M_DRD, Data, M_DRDI) {
+     drp_sendDMAData;
+     w_deallocateTBE;
+-    qw_queueMemoryWBRequest;
++    qw_queueMemoryWBRequestDMA; 
+     k_popIncomingResponseQueue;
+   }
+ 
+@@ -547,7 +658,7 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
+ 
+   transition(M, DMA_WRITE, M_DWR) {
+     v_allocateTBE;
+-    inv_sendCacheInvalidate;
++    inv_sendCacheInvalidateDMA; 
+     j_popIncomingRequestQueue;
+   }
+ 
+diff --git a/src/mem/ruby/protocol/MESI_Two_Level-msg.sm b/src/mem/ruby/protocol/MESI_Two_Level-msg.sm
+index 738019e7b0..d9db04140f 100644
+--- a/src/mem/ruby/protocol/MESI_Two_Level-msg.sm
++++ b/src/mem/ruby/protocol/MESI_Two_Level-msg.sm
+@@ -69,6 +69,12 @@ structure(RequestMsg, desc="...", interface="Message") {
+   bool Dirty, default="false",  desc="Dirty bit";
+   PrefetchBit Prefetch,         desc="Is this a prefetch request";
+ 
++  
++  bool requestIsGC,             default="false",desc="If flag is set, request is GC";
++  bool requestIsNonGC,          default="false",desc="If flag is set, request is non GC";
++  bool requestIsJdk,          default="false",desc="If flag is set, request is of interest to JDK";
++  bool requestIsJdkLoad,      default="false",desc="If flag is set, request is load otherwise it is store";
++
+   bool functionalRead(Packet *pkt) {
+     // Only PUTX messages contains the data block
+     if (Type == CoherenceRequestType:PUTX) {
+@@ -96,6 +102,12 @@ structure(ResponseMsg, desc="...", interface="Message") {
+   int AckCount, default="0",  desc="number of acks in this message";
+   MessageSizeType MessageSize,  desc="size category of the message";
+ 
++  
++  bool requestIsGC,             default="false",desc="If flag is set, request is GC";
++  bool requestIsNonGC,          default="false",desc="If flag is set, request is non GC";
++  bool requestIsJdk,          default="false",desc="If flag is set, request is of interest to JDK";
++  bool requestIsJdkLoad,      default="false",desc="If flag is set, request is load otherwise it is store";
++
+   bool functionalRead(Packet *pkt) {
+     // Valid data block is only present in message with following types
+     if (Type == CoherenceResponseType:DATA ||
+diff --git a/src/mem/ruby/protocol/RubySlicc_MemControl.sm b/src/mem/ruby/protocol/RubySlicc_MemControl.sm
+index 848ada4d12..276249c0b1 100644
+--- a/src/mem/ruby/protocol/RubySlicc_MemControl.sm
++++ b/src/mem/ruby/protocol/RubySlicc_MemControl.sm
+@@ -77,6 +77,12 @@ structure(MemoryMsg, desc="...", interface="Message") {
+   bool isGLCSet,                desc="Bypass L1 Cache";
+   bool isSLCSet,                desc="Bypass L1 and L2 Caches";
+ 
++  
++  bool requestIsGC,             default="false",desc="If flag is set, request is GC";
++  bool requestIsNonGC,          default="false",desc="If flag is set, request is non GC";
++  bool requestIsJdk,          default="false",desc="If flag is set, request is of interest to JDK";
++  bool requestIsJdkLoad,      default="false",desc="If flag is set, request is load otherwise it is store";
++
+   bool functionalRead(Packet *pkt) {
+     if ((MessageSize == MessageSizeType:Response_Data) ||
+         (MessageSize == MessageSizeType:Writeback_Data))  {
+diff --git a/src/mem/ruby/protocol/RubySlicc_Types.sm b/src/mem/ruby/protocol/RubySlicc_Types.sm
+index 848d16491d..c508bbe81e 100644
+--- a/src/mem/ruby/protocol/RubySlicc_Types.sm
++++ b/src/mem/ruby/protocol/RubySlicc_Types.sm
+@@ -191,6 +191,12 @@ structure(RubyRequest, desc="...", interface="Message", external="yes") {
+   bool isSLCSet,             default="false",desc="If flag is set, bypass GPU L1 and L2 caches";
+   bool isSecure,             default="false",desc="If flag is set, request is in secure PA space";
+ 
++  
++  bool requestIsGC,          default="false",desc="If flag is set, request is GC";
++  bool requestIsNonGC,       default="false",desc="If flag is set, request is non GC";
++  bool requestIsJdk,       default="false",desc="If flag is set, request is of interest to JDK";
++  bool requestIsJdkLoad,   default="false",desc="If flag is set, request is load otherwise it is store";
++
+   RequestPtr getRequestPtr();
+ }
+ 
+@@ -237,6 +243,12 @@ structure (CacheMemory, external = "yes") {
+   void profileDemandMiss();
+   void profilePrefetchHit();
+   void profilePrefetchMiss();
++
++  
++  void profileJdkDemandHit(Addr, bool, bool, bool, bool);
++  void profileJdkDemandMiss(Addr, bool, bool, bool, bool);
++  void profileJdkInit(Addr, AbstractCacheEntry);
++  void profileJdkAccess(Addr, bool, bool, bool, AbstractCacheEntry);
+ }
+ 
+ structure (WireBuffer, inport="yes", outport="yes", external = "yes") {
+diff --git a/src/mem/ruby/slicc_interface/AbstractCacheEntry.hh b/src/mem/ruby/slicc_interface/AbstractCacheEntry.hh
+index 1305deddce..c3d315cdc0 100644
+--- a/src/mem/ruby/slicc_interface/AbstractCacheEntry.hh
++++ b/src/mem/ruby/slicc_interface/AbstractCacheEntry.hh
+@@ -127,6 +127,34 @@ class AbstractCacheEntry : public ReplaceableEntry
+     // hardware transactional memory
+     bool m_htmInReadSet;
+     bool m_htmInWriteSet;
++
++  
++  public:
++    bool isJdk = false;
++    bool isAllocatedByGC = false;
++    bool isAllocatedByNonGC = false;
++    bool isOnceAccessedByGC = false;
++    bool isOnceAccessedByNonGC = false;
++
++    void jdkWipe() {
++        isJdk = false;
++        isAllocatedByGC = false;
++        isAllocatedByNonGC = false;
++        isOnceAccessedByGC = false;
++        isOnceAccessedByNonGC = false;
++    }
++
++    void jdkInit(bool requestIsJdk,
++      bool requestIsGC, bool requestIsNonGC) {
++        if (requestIsJdk && requestIsGC && requestIsNonGC) {
++            panic("JDKERROR: request is both GC and Non GC");
++        }
++        isJdk = requestIsJdk;
++        isAllocatedByGC = requestIsGC;
++        isAllocatedByNonGC = requestIsNonGC;
++        isOnceAccessedByGC = false;
++        isOnceAccessedByNonGC = false;
++    }
+ };
+ 
+ inline std::ostream&
+diff --git a/src/mem/ruby/slicc_interface/AbstractController.cc b/src/mem/ruby/slicc_interface/AbstractController.cc
+index f706517bfa..fbb92213c9 100644
+--- a/src/mem/ruby/slicc_interface/AbstractController.cc
++++ b/src/mem/ruby/slicc_interface/AbstractController.cc
+@@ -278,6 +278,13 @@ AbstractController::serviceMemoryQueue()
+ 
+     RequestPtr req
+         = std::make_shared<Request>(mem_msg->m_addr, req_size, 0, m_id);
++
++    
++    req->setIsGC(mem_msg->m_requestIsGC);
++    req->setIsNonGC(mem_msg->m_requestIsNonGC);
++    // req->setIsJdk();
++    req->setIsJdkLoad(mem_msg->m_requestIsJdkLoad);
++
+     PacketPtr pkt;
+     if (mem_msg->getType() == MemoryRequestType_MEMORY_WB) {
+         pkt = Packet::createWrite(req);
+diff --git a/src/mem/ruby/slicc_interface/RubyRequest.hh b/src/mem/ruby/slicc_interface/RubyRequest.hh
+index 58eae229be..df3391e1e9 100644
+--- a/src/mem/ruby/slicc_interface/RubyRequest.hh
++++ b/src/mem/ruby/slicc_interface/RubyRequest.hh
+@@ -86,6 +86,12 @@ class RubyRequest : public Message
+     bool m_isSLCSet;
+     bool m_isSecure;
+ 
++    
++    bool m_requestIsGC;
++    bool m_requestIsNonGC;
++    bool m_requestIsJdk;
++    bool m_requestIsJdkLoad;
++
+     RubyRequest(Tick curTime, int block_size, RubySystem *rs,
+         uint64_t _paddr, int _len,
+         uint64_t _pc, RubyRequestType _type, RubyAccessMode _access_mode,
+@@ -106,7 +112,12 @@ class RubyRequest : public Message
+           m_htmTransactionUid(0),
+           m_isTlbi(false),
+           m_tlbiTransactionUid(0),
+-          m_isSecure(m_pkt ? m_pkt->req->isSecure() : false)
++          m_isSecure(m_pkt ? m_pkt->req->isSecure() : false),
++          
++          m_requestIsGC(m_pkt->req->getIsGC()),
++          m_requestIsNonGC(m_pkt->req->getIsNonGC()),
++          m_requestIsJdk(m_pkt->req->getIsJdk()),
++          m_requestIsJdkLoad(m_pkt->req->getIsJdkLoad())
+     {
+         int block_size_bits = floorLog2(block_size);
+         m_LineAddress = makeLineAddress(m_PhysicalAddress, block_size_bits);
+@@ -138,7 +149,12 @@ class RubyRequest : public Message
+           m_htmTransactionUid(0),
+           m_isTlbi(false),
+           m_tlbiTransactionUid(0),
+-          m_isSecure(m_pkt->req->isSecure())
++          m_isSecure(m_pkt->req->isSecure()),
++          
++          m_requestIsGC(m_pkt->req->getIsGC()),
++          m_requestIsNonGC(m_pkt->req->getIsNonGC()),
++          m_requestIsJdk(m_pkt->req->getIsJdk()),
++          m_requestIsJdkLoad(m_pkt->req->getIsJdkLoad())
+     {
+         assert(m_pkt->req->isMemMgmt());
+         if (_pkt) {
+@@ -174,7 +190,12 @@ class RubyRequest : public Message
+           m_htmTransactionUid(0),
+           m_isTlbi(false),
+           m_tlbiTransactionUid(0),
+-          m_isSecure(m_pkt->req->isSecure())
++          m_isSecure(m_pkt->req->isSecure()),
++          
++          m_requestIsGC(m_pkt->req->getIsGC()),
++          m_requestIsNonGC(m_pkt->req->getIsNonGC()),
++          m_requestIsJdk(m_pkt->req->getIsJdk()),
++          m_requestIsJdkLoad(m_pkt->req->getIsJdkLoad())
+     {
+         int block_size_bits = floorLog2(block_size);
+         m_LineAddress = makeLineAddress(m_PhysicalAddress, block_size_bits);
+@@ -212,7 +233,12 @@ class RubyRequest : public Message
+           m_htmTransactionUid(0),
+           m_isTlbi(false),
+           m_tlbiTransactionUid(0),
+-          m_isSecure(m_pkt->req->isSecure())
++          m_isSecure(m_pkt->req->isSecure()),
++          
++          m_requestIsGC(m_pkt->req->getIsGC()),
++          m_requestIsNonGC(m_pkt->req->getIsNonGC()),
++          m_requestIsJdk(m_pkt->req->getIsJdk()),
++          m_requestIsJdkLoad(m_pkt->req->getIsJdkLoad())
+     {
+         int block_size_bits = floorLog2(block_size);
+         m_LineAddress = makeLineAddress(m_PhysicalAddress, block_size_bits);
+diff --git a/src/mem/ruby/structures/CacheMemory.cc b/src/mem/ruby/structures/CacheMemory.cc
+index 6bc35bac7d..53260e94e2 100644
+--- a/src/mem/ruby/structures/CacheMemory.cc
++++ b/src/mem/ruby/structures/CacheMemory.cc
+@@ -572,7 +572,59 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
+       ADD_STAT(m_prefetch_misses, "Number of cache prefetch misses"),
+       ADD_STAT(m_prefetch_accesses, "Number of cache prefetch accesses",
+                m_prefetch_hits + m_prefetch_misses),
+-      ADD_STAT(m_accessModeType, "")
++      ADD_STAT(m_accessModeType, ""),
++      
++      ADD_STAT(m_gc_load_demand_hits,
++              "Number of GC load cache demand hits"),
++      ADD_STAT(m_gc_load_demand_misses,
++              "Number of GC load cache demand misses"),
++      ADD_STAT(m_gc_load_demand_accesses,
++              "Number of GC load cache demand accesses",
++              m_gc_load_demand_hits + m_gc_load_demand_misses),
++      ADD_STAT(m_gc_store_demand_hits,
++              "Number of GC store cache demand hits"),
++      ADD_STAT(m_gc_store_demand_misses,
++              "Number of GC store cache demand misses"),
++      ADD_STAT(m_gc_store_demand_accesses,
++              "Number of GC store cache demand accesses",
++              m_gc_store_demand_hits + m_gc_store_demand_misses),
++      ADD_STAT(m_non_gc_load_demand_hits,
++              "Number of NonGC load cache demand hits"),
++      ADD_STAT(m_non_gc_load_demand_misses,
++              "Number of NonGC load cache demand misses"),
++      ADD_STAT(m_non_gc_load_demand_accesses,
++              "Number of NonGC load cache demand accesses",
++              m_non_gc_load_demand_hits + m_non_gc_load_demand_misses),
++      ADD_STAT(m_non_gc_store_demand_hits,
++              "Number of NonGC store cache demand hits"),
++      ADD_STAT(m_non_gc_store_demand_misses,
++              "Number of NonGC store cache demand misses"),
++      ADD_STAT(m_non_gc_store_demand_accesses,
++              "Number of NonGC store cache demand accesses",
++              m_non_gc_store_demand_hits + m_non_gc_store_demand_misses),
++      ADD_STAT(m_demand_gc_lines_allocated,
++              "Number of GC lines allocated due to demand access"),
++      ADD_STAT(m_demand_non_gc_lines_allocated,
++              "Number of Non GC lines allocated due to demand access"),
++      ADD_STAT(m_demand_lines_allocated,
++              "Number of lines allocated due to demand access",
++              m_demand_gc_lines_allocated + m_demand_non_gc_lines_allocated),
++      ADD_STAT(m_lines_allocated_by_gc_accessed_by_gc,
++    "Number of lines allocated by GC accessed by GC (once per line)"),
++      ADD_STAT(m_lines_allocated_by_gc_accessed_by_non_gc,
++    "Number of lines allocated by GC accessed by Non GC (once per line)"),
++      ADD_STAT(m_lines_allocated_by_non_gc_accessed_by_gc,
++    "Number of lines allocated by Non GC accessed by GC (once per line)"),
++      ADD_STAT(m_lines_allocated_by_non_gc_accessed_by_non_gc,
++    "Number of lines allocated by Non GC accessed by Non GC (once per line)"),
++      ADD_STAT(m_num_gc_lines_accessed_by_gc,
++              "Number of GC lines accessed by GC"),
++      ADD_STAT(m_num_gc_lines_accessed_by_non_gc,
++              "Number of GC lines accessed by Non GC"),
++      ADD_STAT(m_num_non_gc_lines_accessed_by_gc,
++              "Number of Non GC lines accessed by GC"),
++      ADD_STAT(m_num_non_gc_lines_accessed_by_non_gc,
++              "Number of Non GC lines accessed by Non GC")
+ {
+     numDataArrayReads
+         .flags(statistics::nozero);
+@@ -807,6 +859,152 @@ CacheMemory::profileDemandMiss()
+     cacheMemoryStats.m_demand_misses++;
+ }
+ 
++
++void
++CacheMemory::profileJdkDemandHit(Addr address, bool isJdk,
++    bool isJdkLoad, bool isGC, bool isNonGC)
++{
++    if (isJdk) {
++        if (isJdkLoad) {
++            if (isGC) {
++                cacheMemoryStats.m_gc_load_demand_hits++;
++                DPRINTF(RubyCache, "JDKERROR: gc load hit for addr: %#x\n",
++                address);
++            } else if (isNonGC) {
++                cacheMemoryStats.m_non_gc_load_demand_hits++;
++                DPRINTF(RubyCache,
++                    "JDKERROR: non gc load hit for addr: %#x\n",
++                    address);
++            } else {
++              panic("JDKERROR: Unknown load request hit [%d %d %d %d]",
++                isJdk, isJdkLoad, isGC, isNonGC);
++            }
++        } else {
++            if (isGC) {
++                cacheMemoryStats.m_gc_store_demand_hits++;
++                DPRINTF(RubyCache, "JDKERROR: gc store hit for addr: %#x\n",
++                address);
++            } else if (isNonGC) {
++                cacheMemoryStats.m_non_gc_store_demand_hits++;
++                DPRINTF(RubyCache,
++                    "JDKERROR: non gc store hit for addr: %#x\n",
++                    address);
++            } else {
++              panic("JDKERROR: Unknown store request hit [%d %d %d %d]",
++                isJdk, isJdkLoad, isGC, isNonGC);
++            }
++        }
++    }
++}
++
++
++void
++CacheMemory::profileJdkDemandMiss(Addr address, bool isJdk,
++    bool isJdkLoad, bool isGC, bool isNonGC)
++{
++    if (isJdk) {
++        if (isJdkLoad) {
++            if (isGC) {
++                cacheMemoryStats.m_gc_load_demand_misses++;
++                DPRINTF(RubyCache, "JDKERROR: gc load miss for addr: %#x\n",
++                    address);
++            } else if (isNonGC) {
++                cacheMemoryStats.m_non_gc_load_demand_misses++;
++                DPRINTF(RubyCache,
++                    "JDKERROR: non gc load miss for addr: %#x\n",
++                    address);
++            } else {
++              panic("JDKERROR: Unknown load request miss [%d %d %d %d]",
++                isJdk, isJdkLoad, isGC, isNonGC);
++            }
++        } else {
++            if (isGC) {
++                cacheMemoryStats.m_gc_store_demand_misses++;
++                DPRINTF(RubyCache, "JDKERROR: gc store miss for addr: %#x\n",
++                    address);
++            } else if (isNonGC) {
++                cacheMemoryStats.m_non_gc_store_demand_misses++;
++                DPRINTF(RubyCache,
++                    "JDKERROR: non gc store miss for addr: %#x\n",
++                    address);
++            } else {
++              panic("JDKERROR: Unknown store request miss [%d %d %d %d]",
++                isJdk, isJdkLoad, isGC, isNonGC);
++            }
++        }
++    }
++}
++
++
++void
++CacheMemory::profileJdkInit(Addr address, AbstractCacheEntry* entry)
++{
++    if (entry->isJdk) {
++        if (entry->isAllocatedByGC) {
++            cacheMemoryStats.m_demand_gc_lines_allocated++;
++            DPRINTF(RubyCache, "JDKERROR: gc allocate addr: %#x\n",
++            address);
++        } else if (entry->isAllocatedByNonGC) {
++            cacheMemoryStats.m_demand_non_gc_lines_allocated++;
++            DPRINTF(RubyCache, "JDKERROR: non gc allocate addr: %#x\n",
++            address);
++        } else {
++          panic("JDKERROR: Unknown JDK line allocate [%d %d %d]",
++            entry->isJdk, entry->isAllocatedByGC, entry->isAllocatedByNonGC);
++        }
++    }
++}
++
++
++void
++CacheMemory::profileJdkAccess(Addr address, bool requestIsJdk,
++        bool requestIsGC, bool requestIsNonGC, AbstractCacheEntry* entry)
++{
++    if (requestIsJdk && entry->isJdk) {
++        if (requestIsGC) {
++            if (entry->isAllocatedByGC) {
++                cacheMemoryStats.m_num_gc_lines_accessed_by_gc++;
++                if (!entry->isOnceAccessedByGC) {
++                    entry->isOnceAccessedByGC = true;
++                    cacheMemoryStats.m_lines_allocated_by_gc_accessed_by_gc++;
++                }
++            } else if (entry->isAllocatedByNonGC) {
++                cacheMemoryStats.m_num_non_gc_lines_accessed_by_gc++;
++                if (!entry->isOnceAccessedByGC) {
++                    entry->isOnceAccessedByGC = true;
++                    cacheMemoryStats
++                        .m_lines_allocated_by_non_gc_accessed_by_gc++;
++                }
++            } else {
++                panic("JDKERROR: Unknown JDK line allocation addr: %#x",
++                    address);
++            }
++        } else if (requestIsNonGC) {
++            if (entry->isAllocatedByGC) {
++                cacheMemoryStats.m_num_gc_lines_accessed_by_non_gc++;
++                if (!entry->isOnceAccessedByNonGC) {
++                    entry->isOnceAccessedByNonGC = true;
++                    cacheMemoryStats
++                        .m_lines_allocated_by_gc_accessed_by_non_gc++;
++                }
++            } else if (entry->isAllocatedByNonGC) {
++                cacheMemoryStats.m_num_non_gc_lines_accessed_by_non_gc++;
++                if (!entry->isOnceAccessedByNonGC) {
++                    entry->isOnceAccessedByNonGC = true;
++                    cacheMemoryStats
++                        .m_lines_allocated_by_non_gc_accessed_by_non_gc++;
++                }
++            } else {
++                panic("JDKERROR: Unknown JDK line allocation addr: %#x",
++                    address);
++            }
++        } else {
++            panic("JDKERROR: Unknown JDK line allocate [%d %d %d]",
++                requestIsJdk, requestIsGC, requestIsNonGC);
++        }
++    }
++}
++
+ void
+ CacheMemory::profilePrefetchHit()
+ {
+diff --git a/src/mem/ruby/structures/CacheMemory.hh b/src/mem/ruby/structures/CacheMemory.hh
+index 912ae22d1f..aada29a2e7 100644
+--- a/src/mem/ruby/structures/CacheMemory.hh
++++ b/src/mem/ruby/structures/CacheMemory.hh
+@@ -254,6 +254,39 @@ class CacheMemory : public SimObject
+           statistics::Formula m_prefetch_accesses;
+ 
+           statistics::Vector m_accessModeType;
++
++          
++          statistics::Scalar m_gc_load_demand_hits;
++          statistics::Scalar m_gc_load_demand_misses;
++          statistics::Formula m_gc_load_demand_accesses;
++          statistics::Scalar m_gc_store_demand_hits;
++          statistics::Scalar m_gc_store_demand_misses;
++          statistics::Formula m_gc_store_demand_accesses;
++
++          
++          statistics::Scalar m_non_gc_load_demand_hits;
++          statistics::Scalar m_non_gc_load_demand_misses;
++          statistics::Formula m_non_gc_load_demand_accesses;
++          statistics::Scalar m_non_gc_store_demand_hits;
++          statistics::Scalar m_non_gc_store_demand_misses;
++          statistics::Formula m_non_gc_store_demand_accesses;
++
++          
++          statistics::Scalar m_demand_gc_lines_allocated;
++          statistics::Scalar m_demand_non_gc_lines_allocated;
++          statistics::Formula m_demand_lines_allocated;
++
++          
++          statistics::Scalar m_lines_allocated_by_gc_accessed_by_gc;
++          statistics::Scalar m_lines_allocated_by_gc_accessed_by_non_gc;
++          statistics::Scalar m_lines_allocated_by_non_gc_accessed_by_gc;
++          statistics::Scalar m_lines_allocated_by_non_gc_accessed_by_non_gc;
++
++          
++          statistics::Scalar m_num_gc_lines_accessed_by_gc;
++          statistics::Scalar m_num_gc_lines_accessed_by_non_gc;
++          statistics::Scalar m_num_non_gc_lines_accessed_by_gc;
++          statistics::Scalar m_num_non_gc_lines_accessed_by_non_gc;
+       } cacheMemoryStats;
+ 
+     public:
+@@ -263,6 +296,15 @@ class CacheMemory : public SimObject
+       void profileDemandMiss();
+       void profilePrefetchHit();
+       void profilePrefetchMiss();
++
++      
++      void profileJdkDemandHit(Addr address, bool isJdk, bool isJdkLoad,
++        bool isGC, bool isNonGC);
++      void profileJdkDemandMiss(Addr address, bool isJdk, bool isJdkLoad,
++        bool isGC, bool isNonGC);
++      void profileJdkInit(Addr address, AbstractCacheEntry* entry);
++      void profileJdkAccess(Addr address, bool requestIsJdk,
++        bool requestIsGC, bool requestIsNonGC, AbstractCacheEntry* entry);
+ };
+ 
+ std::ostream& operator<<(std::ostream& out, const CacheMemory& obj);
+diff --git a/src/mem/ruby/system/RubyPort.cc b/src/mem/ruby/system/RubyPort.cc
+index 21a668a4aa..14ae445bbf 100644
+--- a/src/mem/ruby/system/RubyPort.cc
++++ b/src/mem/ruby/system/RubyPort.cc
+@@ -251,8 +251,12 @@ RubyPort::PioResponsePort::recvAtomic(PacketPtr pkt)
+ bool
+ RubyPort::MemResponsePort::recvTimingReq(PacketPtr pkt)
+ {
+-    DPRINTF(RubyPort, "Timing request for address %#x on port %d\n",
+-            pkt->getAddr(), id);
++    
++    DPRINTF(RubyPort, "Timing request for address %#x on port %d "
++        "(isjdk: %d, isjdkload: %d, isgc: %d, isnongc: %d)\n",
++            pkt->getAddr(), id, pkt->req->getIsJdk(),
++            pkt->req->getIsJdkLoad(),
++            pkt->req->getIsGC(), pkt->req->getIsNonGC());
+ 
+     if (pkt->cacheResponding())
+         panic("RubyPort should never see request with the "
+diff --git a/src/python/SConscript b/src/python/SConscript
+index ab711fb668..8794f9905a 100644
+--- a/src/python/SConscript
++++ b/src/python/SConscript
+@@ -51,6 +51,8 @@ PySource('gem5.components.boards', 'gem5/components/boards/simple_board.py')
+ PySource('gem5.components.boards', 'gem5/components/boards/test_board.py')
+ PySource('gem5.components.boards', 'gem5/components/boards/x86_board.py')
+ PySource('gem5.components.boards', 'gem5/components/boards/arm_board.py')
++
++PySource('gem5.components.boards', 'gem5/components/boards/jdk_board.py')
+ PySource('gem5.components.boards',
+     "gem5/components/boards/kernel_disk_workload.py")
+ PySource('gem5.components.boards',
+@@ -97,6 +99,10 @@ PySource('gem5.components.cachehierarchies.classic',
+ PySource('gem5.components.cachehierarchies.classic',
+     'gem5/components/cachehierarchies/classic/'
+     'private_l1_shared_l2_cache_hierarchy.py')
++
++PySource('gem5.components.cachehierarchies.classic',
++    'gem5/components/cachehierarchies/classic/'
++    'private_l1_private_l2_shared_l3_cache_hierarchy.py')
+ PySource('gem5.components.cachehierarchies.classic.caches',
+     'gem5/components/cachehierarchies/classic/caches/__init__.py')
+ PySource('gem5.components.cachehierarchies.classic.caches',
+@@ -105,6 +111,9 @@ PySource('gem5.components.cachehierarchies.classic.caches',
+     'gem5/components/cachehierarchies/classic/caches/l1icache.py')
+ PySource('gem5.components.cachehierarchies.classic.caches',
+     'gem5/components/cachehierarchies/classic/caches/l2cache.py')
++
++PySource('gem5.components.cachehierarchies.classic.caches',
++    'gem5/components/cachehierarchies/classic/caches/l3cache.py')
+ PySource('gem5.components.cachehierarchies.classic.caches',
+     'gem5/components/cachehierarchies/classic/caches/mmu_cache.py')
+ PySource('gem5.components.cachehierarchies.ruby',
+@@ -215,6 +224,9 @@ PySource('gem5.components.memory', 'gem5/components/memory/memory.py')
+ PySource('gem5.components.memory', 'gem5/components/memory/single_channel.py')
+ PySource('gem5.components.memory', 'gem5/components/memory/multi_channel.py')
+ PySource('gem5.components.memory', 'gem5/components/memory/hbm.py')
++
++PySource('gem5.components.memory',
++    'gem5/components/memory/ramulator2_memory.py')
+ PySource('gem5.components.memory.dram_interfaces',
+     'gem5/components/memory/dram_interfaces/__init__.py')
+ PySource('gem5.components.memory.dram_interfaces',
+diff --git a/src/python/gem5/components/boards/jdk_board.py b/src/python/gem5/components/boards/jdk_board.py
+new file mode 100644
+index 0000000000..d81582bc43
+--- /dev/null
++++ b/src/python/gem5/components/boards/jdk_board.py
+@@ -0,0 +1,399 @@
++# Copyright (c) 2021 The Regents of the University of California
++# All rights reserved.
++#
++# Redistribution and use in source and binary forms, with or without
++# modification, are permitted provided that the following conditions are
++# met: redistributions of source code must retain the above copyright
++# notice, this list of conditions and the following disclaimer;
++# redistributions in binary form must reproduce the above copyright
++# notice, this list of conditions and the following disclaimer in the
++# documentation and/or other materials provided with the distribution;
++# neither the name of the copyright holders nor the names of its
++# contributors may be used to endorse or promote products derived from
++# this software without specific prior written permission.
++#
++# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++
++from typing import (
++    List,
++    Sequence,
++)
++
++from m5.objects import (
++    Addr,
++    AddrRange,
++    BaseXBar,
++    Bridge,
++    CowDiskImage,
++    IdeDisk,
++    IOXBar,
++    Pc,
++    Port,
++    RawDiskImage,
++    X86ACPIMadt,
++    X86ACPIMadtIntSourceOverride,
++    X86ACPIMadtIOAPIC,
++    X86ACPIMadtLAPIC,
++    X86E820Entry,
++    X86FsLinux,
++    X86IntelMPBus,
++    X86IntelMPBusHierarchy,
++    X86IntelMPIOAPIC,
++    X86IntelMPIOIntAssignment,
++    X86IntelMPProcessor,
++    X86SMBiosBiosInformation,
++)
++from m5.util.convert import toMemorySize
++
++from ...components.boards.se_binary_workload import SEBinaryWorkload
++from ...isas import ISA
++from ...resources.resource import AbstractResource
++from ...utils.override import overrides
++from ..cachehierarchies.abstract_cache_hierarchy import AbstractCacheHierarchy
++from ..memory.abstract_memory_system import AbstractMemorySystem
++from ..processors.abstract_processor import AbstractProcessor
++from .abstract_system_board import AbstractSystemBoard
++from .kernel_disk_workload import KernelDiskWorkload
++
++
++
++class JdkBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
++    """
++    A board capable of full system simulation for X86.
++
++    **Limitations**
++    * Currently, this board's memory is hardcoded to 3GiB.
++    * Much of the I/O subsystem is hard coded.
++    """
++
++    def __init__(
++        self,
++        clk_freq: str,
++        processor: AbstractProcessor,
++        memory: AbstractMemorySystem,
++        cache_hierarchy: AbstractCacheHierarchy,
++        benchmark_image: AbstractResource,
++        mount_benchmark_as_cow: bool,
++    ) -> None:
++        super().__init__(
++            clk_freq=clk_freq,
++            processor=processor,
++            memory=memory,
++            cache_hierarchy=cache_hierarchy,
++        )
++
++        if self.get_processor().get_isa() != ISA.X86:
++            raise Exception(
++                "The JdkBoard requires a processor using the X86 "
++                f"ISA. Current processor ISA: '{processor.get_isa().name}'."
++            )
++        self._benchmark_image = benchmark_image
++        self._mount_benchmark_as_cow = mount_benchmark_as_cow
++
++    @overrides(AbstractSystemBoard)
++    def _setup_board(self) -> None:
++        if self.is_fullsystem():
++            self.pc = Pc()
++
++            self.workload = X86FsLinux()
++
++            # North Bridge
++            self.iobus = IOXBar()
++
++            # Set up all of the I/O.
++            self._setup_io_devices()
++
++            self.m5ops_base = 0xFFFF0000
++
++    def _setup_io_devices(self):
++        """Sets up the x86 IO devices.
++
++        .. note::
++
++            This is mostly copy-paste from prior X86 FS setups. Some of it
++            may not be documented and there may be bugs.
++        """
++
++        # Constants similar to x86_traits.hh
++        IO_address_space_base = 0x8000000000000000
++        pci_config_address_space_base = 0xC000000000000000
++        interrupts_address_space_base = 0xA000000000000000
++        APIC_range_size = 1 << 12
++
++        # Setup memory system specific settings.
++        if self.get_cache_hierarchy().is_ruby():
++            self.pc.attachIO(self.get_io_bus(), [self.pc.south_bridge.ide.dma])
++        else:
++            self.bridge = Bridge(delay="50ns")
++            self.bridge.mem_side_port = self.get_io_bus().cpu_side_ports
++            self.bridge.cpu_side_port = (
++                self.get_cache_hierarchy().get_mem_side_port()
++            )
++
++            # # Constants similar to x86_traits.hh
++            IO_address_space_base = 0x8000000000000000
++            pci_config_address_space_base = 0xC000000000000000
++            interrupts_address_space_base = 0xA000000000000000
++            APIC_range_size = 1 << 12
++
++            self.bridge.ranges = [
++                AddrRange(0xC0000000, 0xFFFF0000),
++                AddrRange(
++                    IO_address_space_base, interrupts_address_space_base - 1
++                ),
++                AddrRange(pci_config_address_space_base, Addr.max),
++            ]
++
++            self.apicbridge = Bridge(delay="50ns")
++            self.apicbridge.cpu_side_port = self.get_io_bus().mem_side_ports
++            self.apicbridge.mem_side_port = (
++                self.get_cache_hierarchy().get_cpu_side_port()
++            )
++            self.apicbridge.ranges = [
++                AddrRange(
++                    interrupts_address_space_base,
++                    interrupts_address_space_base
++                    + self.get_processor().get_num_cores() * APIC_range_size
++                    - 1,
++                )
++            ]
++            self.pc.attachIO(self.get_io_bus())
++
++        # Add in a Bios information structure.
++        self.workload.smbios_table.structures = [X86SMBiosBiosInformation()]
++
++        # Set up the Intel MP table
++        base_entries = []
++        ext_entries = []
++        # Updated the X86 board with MADT entries.
++        madt_entries = []
++        for i in range(self.get_processor().get_num_cores()):
++            bp = X86IntelMPProcessor(
++                local_apic_id=i,
++                local_apic_version=0x14,
++                enable=True,
++                bootstrap=(i == 0),
++            )
++            base_entries.append(bp)
++            lapic = X86ACPIMadtLAPIC(acpi_processor_id=i, apic_id=i, flags=1)
++            madt_entries.append(lapic)
++
++        io_apic = X86IntelMPIOAPIC(
++            id=self.get_processor().get_num_cores(),
++            version=0x11,
++            enable=True,
++            address=0xFEC00000,
++        )
++
++        self.pc.south_bridge.io_apic.apic_id = io_apic.id
++        base_entries.append(io_apic)
++        madt_entries.append(
++            X86ACPIMadtIOAPIC(
++                id=io_apic.id, address=io_apic.address, int_base=0
++            )
++        )
++
++        pci_bus = X86IntelMPBus(bus_id=0, bus_type="PCI   ")
++        base_entries.append(pci_bus)
++        isa_bus = X86IntelMPBus(bus_id=1, bus_type="ISA   ")
++        base_entries.append(isa_bus)
++        connect_busses = X86IntelMPBusHierarchy(
++            bus_id=1, subtractive_decode=True, parent_bus=0
++        )
++        ext_entries.append(connect_busses)
++
++        pci_dev4_inta = X86IntelMPIOIntAssignment(
++            interrupt_type="INT",
++            polarity="ConformPolarity",
++            trigger="ConformTrigger",
++            source_bus_id=0,
++            source_bus_irq=0 + (4 << 2),
++            dest_io_apic_id=io_apic.id,
++            dest_io_apic_intin=16,
++        )
++
++        base_entries.append(pci_dev4_inta)
++        pci_dev4_inta_madt = X86ACPIMadtIntSourceOverride(
++            bus_source=pci_dev4_inta.source_bus_id,
++            irq_source=pci_dev4_inta.source_bus_irq,
++            sys_int=pci_dev4_inta.dest_io_apic_intin,
++            flags=0,
++        )
++        madt_entries.append(pci_dev4_inta_madt)
++
++        def assignISAInt(irq, apicPin):
++            assign_8259_to_apic = X86IntelMPIOIntAssignment(
++                interrupt_type="ExtInt",
++                polarity="ConformPolarity",
++                trigger="ConformTrigger",
++                source_bus_id=1,
++                source_bus_irq=irq,
++                dest_io_apic_id=io_apic.id,
++                dest_io_apic_intin=0,
++            )
++            base_entries.append(assign_8259_to_apic)
++
++            assign_to_apic = X86IntelMPIOIntAssignment(
++                interrupt_type="INT",
++                polarity="ConformPolarity",
++                trigger="ConformTrigger",
++                source_bus_id=1,
++                source_bus_irq=irq,
++                dest_io_apic_id=io_apic.id,
++                dest_io_apic_intin=apicPin,
++            )
++            base_entries.append(assign_to_apic)
++            # acpi
++            assign_to_apic_acpi = X86ACPIMadtIntSourceOverride(
++                bus_source=1, irq_source=irq, sys_int=apicPin, flags=0
++            )
++            madt_entries.append(assign_to_apic_acpi)
++
++        assignISAInt(0, 2)
++        assignISAInt(1, 1)
++
++        for i in range(3, 15):
++            assignISAInt(i, i)
++
++        self.workload.intel_mp_table.base_entries = base_entries
++        self.workload.intel_mp_table.ext_entries = ext_entries
++
++        madt = X86ACPIMadt(
++            local_apic_address=0, records=madt_entries, oem_id="madt"
++        )
++        self.workload.acpi_description_table_pointer.rsdt.entries.append(madt)
++        self.workload.acpi_description_table_pointer.xsdt.entries.append(madt)
++        self.workload.acpi_description_table_pointer.oem_id = "gem5"
++        self.workload.acpi_description_table_pointer.rsdt.oem_id = "gem5"
++        self.workload.acpi_description_table_pointer.xsdt.oem_id = "gem5"
++        entries = [
++            # Mark the first megabyte of memory as reserved
++            X86E820Entry(addr=0, size="639KiB", range_type=1),
++            X86E820Entry(addr=0x9FC00, size="385KiB", range_type=2),
++            # Mark the rest of physical memory as available
++            X86E820Entry(
++                addr=0x100000,
++                size=f"{self.mem_ranges[0].size() - 0x100000:d}B",
++                range_type=1,
++            ),
++        ]
++
++        # Reserve the last 16KiB of the 32-bit address space for m5ops
++        entries.append(
++            X86E820Entry(addr=0xFFFF0000, size="64KiB", range_type=2)
++        )
++
++        self.workload.e820_table.entries = entries
++
++    @overrides(AbstractSystemBoard)
++    def has_io_bus(self) -> bool:
++        return self.is_fullsystem()
++
++    @overrides(AbstractSystemBoard)
++    def get_io_bus(self) -> IOXBar:
++        if self.has_io_bus():
++            return self.iobus
++        else:
++            raise Exception(
++                "Cannot execute `get_io_bus()`: Board does not have an I/O "
++                "bus to return. Use `has_io_bus()` to check this."
++            )
++
++    @overrides(AbstractSystemBoard)
++    def has_dma_ports(self) -> bool:
++        return self.is_fullsystem()
++
++    @overrides(AbstractSystemBoard)
++    def get_dma_ports(self) -> Sequence[Port]:
++        if self.has_dma_ports():
++            return [self.pc.south_bridge.ide.dma, self.iobus.mem_side_ports]
++        else:
++            raise Exception(
++                "Cannot execute `get_dma_ports()`: Board does not have DMA "
++                "ports to return. Use `has_dma_ports()` to check this."
++            )
++
++    @overrides(AbstractSystemBoard)
++    def has_coherent_io(self) -> bool:
++        return self.is_fullsystem()
++
++    @overrides(AbstractSystemBoard)
++    def get_mem_side_coherent_io_port(self) -> Port:
++        if self.has_coherent_io():
++            return self.iobus.mem_side_ports
++        else:
++            raise Exception(
++                "Cannot execute `get_mem_side_coherent_io_port()`: Board does "
++                "not have I/O ports to return. Use `has_coherent_io()` to "
++                "check this."
++            )
++
++    @overrides(AbstractSystemBoard)
++    def _setup_memory_ranges(self):
++        memory = self.get_memory()
++
++        if memory.get_size() > toMemorySize("3GiB"):
++            raise Exception(
++                "X86Board currently only supports memory sizes up "
++                "to 3GiB because of the I/O hole."
++            )
++        data_range = AddrRange(memory.get_size())
++        memory.set_memory_range([data_range])
++
++        # Add the address range for the IO
++        self.mem_ranges = [
++            data_range,  # All data
++            AddrRange(0xC0000000, size=0x100000),  # For I/0
++        ]
++
++    @overrides(KernelDiskWorkload)
++    def get_disk_device(self):
++        return "/dev/hda"
++
++    @overrides(KernelDiskWorkload)
++    def _add_disk_to_board(self, disk_image: AbstractResource):
++        ide_disk = IdeDisk()
++        ide_disk.driveID = "device0"
++        ide_disk.image = CowDiskImage(
++            child=RawDiskImage(read_only=True), read_only=False
++        )
++        ide_disk.image.child.image_file = disk_image.get_local_path()
++
++        benchmark_disk = IdeDisk()
++        benchmark_disk.driveID = "device1"
++        if self._mount_benchmark_as_cow == True:
++            benchmark_disk.image = CowDiskImage(
++                child=RawDiskImage(read_only=True), read_only=False
++            )
++            benchmark_disk.image.child.image_file = (
++                self._benchmark_image.get_local_path()
++            )
++        else:
++            benchmark_disk.image = RawDiskImage(
++                image_file=self._benchmark_image.get_local_path(),
++                read_only=False,
++            )
++
++        # Attach the SimObject to the system.
++        self.pc.south_bridge.ide.disks = [ide_disk, benchmark_disk]
++
++    @overrides(KernelDiskWorkload)
++    def get_default_kernel_args(self) -> List[str]:
++        return [
++            "earlyprintk=ttyS0",
++            "console=ttyS0",
++            "lpj=7999923",
++            "root={root_value}",
++            "disk_device={disk_device}",
++        ]
+diff --git a/src/python/gem5/components/cachehierarchies/classic/caches/l3cache.py b/src/python/gem5/components/cachehierarchies/classic/caches/l3cache.py
+new file mode 100644
+index 0000000000..3a8a441622
+--- /dev/null
++++ b/src/python/gem5/components/cachehierarchies/classic/caches/l3cache.py
+@@ -0,0 +1,42 @@
++
++from typing import Type
++
++from m5.objects import (
++    BasePrefetcher,
++    Cache,
++    Clusivity,
++    StridePrefetcher,
++)
++
++from .....utils.override import *
++
++
++class L3Cache(Cache):
++    """
++    A simple L3 Cache with default values.
++    """
++
++    def __init__(
++        self,
++        size: str,
++        assoc: int = 16,
++        tag_latency: int = 20,
++        data_latency: int = 20,
++        response_latency: int = 20,
++        mshrs: int = 20,
++        tgts_per_mshr: int = 12,
++        writeback_clean: bool = False,
++        clusivity: Clusivity = "mostly_incl",  # should it be "mostly_excl"?
++        PrefetcherCls: Type[BasePrefetcher] = StridePrefetcher,
++    ):
++        super().__init__()
++        self.size = size
++        self.assoc = assoc
++        self.tag_latency = tag_latency
++        self.data_latency = data_latency
++        self.response_latency = response_latency
++        self.mshrs = mshrs
++        self.tgts_per_mshr = tgts_per_mshr
++        self.writeback_clean = writeback_clean
++        self.clusivity = clusivity
++        self.prefetcher = PrefetcherCls()
+diff --git a/src/python/gem5/components/cachehierarchies/classic/private_l1_private_l2_shared_l3_cache_hierarchy.py b/src/python/gem5/components/cachehierarchies/classic/private_l1_private_l2_shared_l3_cache_hierarchy.py
+new file mode 100644
+index 0000000000..1f12a7f92a
+--- /dev/null
++++ b/src/python/gem5/components/cachehierarchies/classic/private_l1_private_l2_shared_l3_cache_hierarchy.py
+@@ -0,0 +1,193 @@
++from typing import Optional
++
++from m5.objects import (
++    BadAddr,
++    BaseXBar,
++    Cache,
++    L2XBar,
++    Port,
++    SystemXBar,
++)
++
++from ....isas import ISA
++from ....utils.override import *
++from ...boards.abstract_board import AbstractBoard
++from ..abstract_cache_hierarchy import AbstractCacheHierarchy
++from ..abstract_three_level_cache_hierarchy import (
++    AbstractThreeLevelCacheHierarchy,
++)
++from .abstract_classic_cache_hierarchy import AbstractClassicCacheHierarchy
++from .caches.l1dcache import L1DCache
++from .caches.l1icache import L1ICache
++from .caches.l2cache import L2Cache
++
++
++from .caches.l3cache import L3Cache
++from .caches.mmu_cache import MMUCache
++
++
++class PrivateL1PrivateL2SharedL3CacheHierarchy(
++    AbstractClassicCacheHierarchy, AbstractThreeLevelCacheHierarchy
++):
++    """
++    A cache setup where each core has a private L1 Data and Instruction Cache,
++    and a L2 cache is shared with all cores. The shared L2 cache is mostly
++    inclusive with respect to the split I/D L1 and MMU caches.
++    """
++
++    def _get_default_membus(self) -> SystemXBar:
++        """
++        A method used to obtain the default memory bus of 64 bit in width for
++        the PrivateL1SharedL2 CacheHierarchy.
++
++        :returns: The default memory bus for the PrivateL1SharedL2
++                  CacheHierarchy.
++
++        :rtype: SystemXBar
++        """
++        membus = SystemXBar(width=64)
++        membus.badaddr_responder = BadAddr()
++        membus.default = membus.badaddr_responder.pio
++        return membus
++
++    def __init__(
++        self,
++        l1d_size: str,
++        l1i_size: str,
++        l2_size: str,
++        l3_size: str,
++        l1d_assoc: int = 8,
++        l1i_assoc: int = 8,
++        l2_assoc: int = 16,
++        l3_assoc: int = 16,
++        membus: Optional[BaseXBar] = None,
++    ) -> None:
++        """
++        :param l1d_size: The size of the L1 Data Cache (e.g., "32KiB").
++        :param  l1i_size: The size of the L1 Instruction Cache (e.g., "32KiB").
++        :param l2_size: The size of the L2 Cache (e.g., "256KiB").
++        :param l3_size: The size of the L3 Cache (e.g., "512KiB").
++        :param l1d_assoc: The associativity of the L1 Data Cache.
++        :param l1i_assoc: The associativity of the L1 Instruction Cache.
++        :param l2_assoc: The associativity of the L2 Cache.
++        :param l3_assoc: The associativity of the L3 Cache.
++        :param membus: The memory bus. This parameter is optional parameter and
++                       will default to a 64 bit width SystemXBar is not
++                       specified.
++        """
++
++        AbstractClassicCacheHierarchy.__init__(self=self)
++        AbstractThreeLevelCacheHierarchy.__init__(
++            self,
++            l1i_size=l1i_size,
++            l1i_assoc=l1i_assoc,
++            l1d_size=l1d_size,
++            l1d_assoc=l1d_assoc,
++            l2_size=l2_size,
++            l2_assoc=l2_assoc,
++            l3_size=l3_size,
++            l3_assoc=l3_assoc,
++        )
++
++        self.membus = membus if membus else self._get_default_membus()
++
++    @overrides(AbstractClassicCacheHierarchy)
++    def get_mem_side_port(self) -> Port:
++        return self.membus.mem_side_ports
++
++    @overrides(AbstractClassicCacheHierarchy)
++    def get_cpu_side_port(self) -> Port:
++        return self.membus.cpu_side_ports
++
++    @overrides(AbstractCacheHierarchy)
++    def incorporate_cache(self, board: AbstractBoard) -> None:
++        # Set up the system port for functional access from the simulator.
++        board.connect_system_port(self.membus.cpu_side_ports)
++
++        for _, port in board.get_mem_ports():
++            self.membus.mem_side_ports = port
++
++        self.l1icaches = [
++            L1ICache(
++                size=self._l1i_size,
++                assoc=self._l1i_assoc,
++                writeback_clean=False,
++            )
++            for i in range(board.get_processor().get_num_cores())
++        ]
++        self.l1dcaches = [
++            L1DCache(size=self._l1d_size, assoc=self._l1d_assoc)
++            for i in range(board.get_processor().get_num_cores())
++        ]
++
++        # ITLB Page walk caches
++        self.iptw_caches = [
++            MMUCache(size="8KiB", writeback_clean=False)
++            for _ in range(board.get_processor().get_num_cores())
++        ]
++        # DTLB Page walk caches
++        self.dptw_caches = [
++            MMUCache(size="8KiB", writeback_clean=False)
++            for _ in range(board.get_processor().get_num_cores())
++        ]
++
++        
++        self.l2buses = [
++            L2XBar() for i in range(board.get_processor().get_num_cores())
++        ]
++        self.l2caches = [
++            L2Cache(size=self._l2_size, assoc=self._l2_assoc)
++            for i in range(board.get_processor().get_num_cores())
++        ]
++
++        self.l3bus = L2XBar()
++        self.l3bus.snoop_filter.max_capacity = "64MiB"
++        self.l3cache = L3Cache(size=self._l3_size, assoc=self._l3_assoc)
++
++        if board.has_coherent_io():
++            self._setup_io_cache(board)
++
++        for i, cpu in enumerate(board.get_processor().get_cores()):
++            cpu.connect_icache(self.l1icaches[i].cpu_side)
++            cpu.connect_dcache(self.l1dcaches[i].cpu_side)
++
++            self.l2buses[i].snoop_filter.max_capacity = "64MiB"
++
++            self.l1icaches[i].mem_side = self.l2buses[i].cpu_side_ports
++            self.l1dcaches[i].mem_side = self.l2buses[i].cpu_side_ports
++            self.iptw_caches[i].mem_side = self.l2buses[i].cpu_side_ports
++            self.dptw_caches[i].mem_side = self.l2buses[i].cpu_side_ports
++
++            cpu.connect_walker_ports(
++                self.iptw_caches[i].cpu_side, self.dptw_caches[i].cpu_side
++            )
++
++            if board.get_processor().get_isa() == ISA.X86:
++                int_req_port = self.membus.mem_side_ports
++                int_resp_port = self.membus.cpu_side_ports
++                cpu.connect_interrupt(int_req_port, int_resp_port)
++            else:
++                cpu.connect_interrupt()
++
++            
++            self.l2buses[i].mem_side_ports = self.l2caches[i].cpu_side
++            self.l2caches[i].mem_side = self.l3bus.cpu_side_ports
++
++        
++        self.l3bus.mem_side_ports = self.l3cache.cpu_side
++        self.membus.cpu_side_ports = self.l3cache.mem_side
++
++    def _setup_io_cache(self, board: AbstractBoard) -> None:
++        """Create a cache for coherent I/O connections"""
++        self.iocache = Cache(
++            assoc=8,
++            tag_latency=50,
++            data_latency=50,
++            response_latency=50,
++            mshrs=20,
++            size="1KiB",
++            tgts_per_mshr=12,
++            addr_ranges=board.mem_ranges,
++        )
++        self.iocache.mem_side = self.membus.cpu_side_ports
++        self.iocache.cpu_side = board.get_mem_side_coherent_io_port()
+diff --git a/src/python/gem5/components/cachehierarchies/ruby/caches/mesi_three_level/l1_cache.py b/src/python/gem5/components/cachehierarchies/ruby/caches/mesi_three_level/l1_cache.py
+index 124a205736..cb1b027537 100644
+--- a/src/python/gem5/components/cachehierarchies/ruby/caches/mesi_three_level/l1_cache.py
++++ b/src/python/gem5/components/cachehierarchies/ruby/caches/mesi_three_level/l1_cache.py
+@@ -105,5 +105,8 @@ class L1Cache(MESI_Three_Level_L0Cache_Controller):
+         # In stdlib terms, they are bufferToL2 and bufferFromL2 respectively.
+         # These buffers are connections between L1 cache and L2 cache.
+         # Later on, we'll need to connect those buffers to L2.
+-        self.bufferToL1 = MessageBuffer(ordered=True)
+-        self.bufferFromL1 = MessageBuffer(ordered=True)
++        # self.bufferToL1 = MessageBuffer(ordered=True)
++        # self.bufferFromL1 = MessageBuffer(ordered=True)
++        
++        self.bufferToL1 = MessageBuffer(ordered=False)
++        self.bufferFromL1 = MessageBuffer(ordered=False)
+diff --git a/src/python/gem5/components/memory/__init__.py b/src/python/gem5/components/memory/__init__.py
+index 49a8cb8173..284a2327d6 100644
+--- a/src/python/gem5/components/memory/__init__.py
++++ b/src/python/gem5/components/memory/__init__.py
+@@ -31,6 +31,9 @@ from .multi_channel import (
+     DualChannelDDR4_2400,
+     DualChannelLPDDR3_1600,
+ )
++
++
++from .ramulator2_memory import Ramulator2Memory
+ from .single_channel import (
+     DIMM_DDR5_4400,
+     DIMM_DDR5_6400,
+diff --git a/src/python/gem5/components/memory/ramulator2_memory.py b/src/python/gem5/components/memory/ramulator2_memory.py
+new file mode 100644
+index 0000000000..5ebb9cf365
+--- /dev/null
++++ b/src/python/gem5/components/memory/ramulator2_memory.py
+@@ -0,0 +1,65 @@
++from typing import (
++    List,
++    Sequence,
++    Tuple,
++)
++
++from m5.objects import (
++    AddrRange,
++    MemCtrl,
++    Port,
++    Ramulator2,
++)
++from m5.util.convert import toMemorySize
++
++from ...utils.override import overrides
++from ..boards.abstract_board import AbstractBoard
++from .abstract_memory_system import AbstractMemorySystem
++
++
++class Ramulator2Memory(AbstractMemorySystem):
++    def __init__(
++        self,
++        config_path: str,
++        output_path: str,
++        size: str,
++        trace_path: str,
++        create_trace: bool,
++    ):
++        super().__init__()
++        self.mem_ctrl = Ramulator2()
++        self.mem_ctrl.config_path = config_path
++        self.mem_ctrl.output_path = output_path
++        self.mem_ctrl.trace_path = trace_path
++        self.mem_ctrl.create_trace = create_trace
++        self._size = toMemorySize(size)
++
++    @overrides(AbstractMemorySystem)
++    def incorporate_memory(self, board: AbstractBoard) -> None:
++        pass
++
++    @overrides(AbstractMemorySystem)
++    def get_mem_ports(self) -> Sequence[Tuple[AddrRange, Port]]:
++        return [(self.mem_ctrl.range, self.mem_ctrl.port)]
++
++    @overrides(AbstractMemorySystem)
++    def get_memory_controllers(self) -> List[MemCtrl]:
++        return [self.mem_ctrl]
++
++    @overrides(AbstractMemorySystem)
++    def get_size(self) -> int:
++        return self._size
++
++    @overrides(AbstractMemorySystem)
++    def set_memory_range(self, ranges: List[AddrRange]) -> None:
++        if len(ranges) != 1:
++            raise Exception(
++                "Currently, we only support single channel Ramulator2"
++            )
++
++        if ranges[0].size() != self._size:
++            raise Exception(
++                "Range of single channel much be equal to total memory"
++            )
++
++        self.mem_ctrl.range = ranges[0]
+diff --git a/src/sim/System.py b/src/sim/System.py
+index fb6ff8622c..71e04de0af 100644
+--- a/src/sim/System.py
++++ b/src/sim/System.py
+@@ -59,6 +59,8 @@ class System(SimObject):
+     cxx_exports = [
+         PyBindMethod("getMemoryMode"),
+         PyBindMethod("setMemoryMode"),
++        
++        PyBindMethod("addGCThread"),
+     ]
+ 
+     memories = VectorParam.AbstractMemory(
+diff --git a/src/sim/pseudo_inst.cc b/src/sim/pseudo_inst.cc
+index 084be5a419..3fd513aa2c 100644
+--- a/src/sim/pseudo_inst.cc
++++ b/src/sim/pseudo_inst.cc
+@@ -71,6 +71,9 @@
+ #include "sim/stats.hh"
+ #include "sim/system.hh"
+ 
++
++#include "cpu/kvm/base.hh"
++
+ namespace gem5
+ {
+ 
+@@ -608,5 +611,68 @@ workend(ThreadContext *tc, uint64_t workid, uint64_t threadid)
+     }
+ }
+ 
++
++void
++jdk_startroi(ThreadContext *tc)
++{
++    warn("JDKM5: START ROI");
++    assert(!tc->getSystemPtr()->inRoi);
++    tc->getSystemPtr()->inRoi = true;
++    jdk_gcevent(tc, 1);
++}
++
++
++void
++jdk_stoproi(ThreadContext *tc)
++{
++    warn("JDKM5: STOP ROI");
++    assert(tc->getSystemPtr()->inRoi);
++    jdk_gcevent(tc, 0);
++    tc->getSystemPtr()->inRoi = false;
++}
++
++
++void
++jdk_gcevent(ThreadContext *tc, uint64_t eventid)
++{
++    warn("JDKM5: GC EVENT ID (%d)", eventid);
++    if (!tc->getSystemPtr()->inRoi) {
++        warn("JDKINFO: NOT IN ROI -> IGNORING EVENT");
++        return;
++    }
++    if (eventid != tc->getSystemPtr()->getExecutionPhase()) {
++        if (dynamic_cast<BaseKvmCPU*>(tc->getCpuPtr()) != nullptr) {
++            warn("JDKINFO: NOT DUMPING STATS AS IN KVM CPU");
++        } else {
++            assert(tc->getCpuPtr()->params().do_statistics_insts);
++            warn("JDKINFO: DUMP AND RESET STATS FOR PHASE: %d",
++                tc->getSystemPtr()->getExecutionPhase());
++            dumpresetstats(tc, 0, 0);
++        }
++        warn("JDKINFO: CHANGING TO EXECUTION PHASE: %d", eventid);
++        tc->getSystemPtr()->setExecutionPhase(eventid);
++    } else {
++        warn("JDKINFO: REPETITIVE EXECUTION PHASE CHANGE CALL: %d", eventid);
++    }
++}
++
++
++void
++jdk_gcthreadstart(ThreadContext *tc, uint64_t threadid)
++{
++    warn("JDKM5: GC THREAD START (%d)", threadid);
++    assert(!tc->getSystemPtr()->isGCThread(threadid));
++    tc->getSystemPtr()->addGCThread(threadid);
++}
++
++
++void
++jdk_gcthreadend(ThreadContext *tc, uint64_t threadid)
++{
++    warn("JDKM5: GC THREAD END (%d)", threadid);
++    assert(tc->getSystemPtr()->isGCThread(threadid));
++    tc->getSystemPtr()->removeGCThread(threadid);
++}
++
+ } // namespace pseudo_inst
+ } // namespace gem5
+diff --git a/src/sim/pseudo_inst.hh b/src/sim/pseudo_inst.hh
+index 2d7b27715b..3cd10aee8a 100644
+--- a/src/sim/pseudo_inst.hh
++++ b/src/sim/pseudo_inst.hh
+@@ -115,6 +115,12 @@ void togglesync(ThreadContext *tc);
+ void triggerWorkloadEvent(ThreadContext *tc);
+ 
+ 
++void jdk_startroi(ThreadContext *tc);
++void jdk_stoproi(ThreadContext *tc);
++void jdk_gcevent(ThreadContext *tc, uint64_t eventid);
++void jdk_gcthreadstart(ThreadContext *tc, uint64_t threadid);
++void jdk_gcthreadend(ThreadContext *tc, uint64_t threadid);
++
+ /**
+  * Execute a decoded M5 pseudo instruction
+  *
+@@ -250,6 +256,31 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
+         invokeSimcall<ABI>(tc, triggerWorkloadEvent);
+         return true;
+ 
++      
++      case M5OP_JDK_START_ROI:
++        invokeSimcall<ABI>(tc, jdk_startroi);
++        return true;
++
++      
++      case M5OP_JDK_STOP_ROI:
++        invokeSimcall<ABI>(tc, jdk_stoproi);
++        return true;
++
++      
++      case M5OP_JDK_GC_EVENT:
++        invokeSimcall<ABI>(tc, jdk_gcevent);
++        return true;
++
++      
++      case M5OP_JDK_GC_THREAD_START:
++        invokeSimcall<ABI>(tc, jdk_gcthreadstart);
++        return true;
++
++      
++      case M5OP_JDK_GC_THREAD_END:
++        invokeSimcall<ABI>(tc, jdk_gcthreadend);
++        return true;
++
+       default:
+         warn("Unhandled m5 op: %#x\n", func);
+         return false;
+diff --git a/src/sim/root.cc b/src/sim/root.cc
+index e53f09d883..6a178194ad 100644
+--- a/src/sim/root.cc
++++ b/src/sim/root.cc
+@@ -75,6 +75,8 @@ Root::RootStats::RootStats()
+              "The number of ticks simulated per host second (ticks/s)"),
+     ADD_STAT(hostMemory, statistics::units::Byte::get(),
+              "Number of bytes of host memory used"),
++    
++    ADD_STAT(statJdkPhase, "Jdk execution phase"),
+ 
+     statTime(true),
+     startTick(0)
+@@ -83,6 +85,10 @@ Root::RootStats::RootStats()
+     simTicks.functor([this]() { return curTick() - startTick; });
+     finalTick.functor(curTick);
+ 
++    
++    statJdkPhase = 0;
++    currentJdkPhase = 0;
++
+     hostMemory
+         .functor(memUsage)
+         .prereq(hostMemory)
+diff --git a/src/sim/root.hh b/src/sim/root.hh
+index ce2245f875..8e101d13d5 100644
+--- a/src/sim/root.hh
++++ b/src/sim/root.hh
+@@ -110,6 +110,10 @@ class Root : public SimObject
+         statistics::Formula hostTickRate;
+         statistics::Value hostMemory;
+ 
++        
++        statistics::Scalar statJdkPhase;
++        int currentJdkPhase;
++
+         static RootStats instance;
+ 
+       private:
+diff --git a/src/sim/sim_object.hh b/src/sim/sim_object.hh
+index 047821d371..96e4c14341 100644
+--- a/src/sim/sim_object.hh
++++ b/src/sim/sim_object.hh
+@@ -353,6 +353,9 @@ class SimObject : public EventManager, public Serializable, public Drainable,
+      * @return Pointer to the single sim object name resolver.
+      */
+     static SimObjectResolver *getSimObjectResolver();
++
++    
++    static SimObjectList getSimObjectList() { return simObjectList; }
+ };
+ 
+ /* Add PARAMS(ClassName) to every descendant of SimObject that needs
+diff --git a/src/sim/system.cc b/src/sim/system.cc
+index 806eca3ddf..d27f2ff9cc 100644
+--- a/src/sim/system.cc
++++ b/src/sim/system.cc
+@@ -62,6 +62,11 @@
+ #include "sim/redirect_path.hh"
+ #include "sim/serialize_handlers.hh"
+ 
++
++#include <typeinfo>
++
++#include "sim/root.hh"
++
+ namespace gem5
+ {
+ 
+@@ -532,4 +537,85 @@ System::getRequestorName(RequestorID requestor_id)
+     return requestor_info.req_name;
+ }
+ 
++
++bool
++System::isGC(uint64_t threadid)
++{
++    return (gcThreadSet.find(threadid) != gcThreadSet.end())
++        || (getExecutionPhase() >= 2);
++}
++
++
++bool
++System::isNonGC(uint64_t threadid)
++{
++    // return true;
++    // return (threadid != 0) && (!isGC(threadid));
++    return !isGC(threadid);
++}
++
++
++bool
++System::isGCThread(uint64_t threadid)
++{
++    return (gcThreadSet.find(threadid) != gcThreadSet.end());
++}
++
++
++void
++System::addGCThread(uint64_t threadid)
++{
++    assert(gcThreadSet.find(threadid) == gcThreadSet.end());
++    warn("JDKINFO: ADDING GC THREAD TID %d", threadid);
++    gcThreadSet.insert(threadid);
++}
++
++
++void
++System::removeGCThread(uint64_t threadid)
++{
++    assert(gcThreadSet.find(threadid) != gcThreadSet.end());
++    warn("JDKINFO: REMOVING GC THREAD TID %d", threadid);
++    gcThreadSet.erase(threadid);
++}
++
++
++uint
++System::getExecutionPhase() {
++    return executionPhase;
++}
++
++
++void
++System::setExecutionPhase(uint _execution_phase) {
++    executionPhase = _execution_phase;
++    rootStats.statJdkPhase = rootStats.currentJdkPhase;
++    rootStats.currentJdkPhase = executionPhase;
++    if (ramulator2Ptr == nullptr) {
++        findRamulator2Ptr();
++    }
++    ramulator2Ptr->changeExecutionPhase(executionPhase);
++}
++
++
++void
++System::findRamulator2Ptr()
++{
++    if (ramulator2Ptr == nullptr) {
++        warn("JDKINFO: Finding Ramulator2");
++        for (auto & simobj : SimObject::getSimObjectList()) {
++            if (dynamic_cast<gem5::memory::Ramulator2*>(simobj) != nullptr) {
++                warn("JDKINFO: Found Ramulator2 -> %s %s",
++                    simobj->name(), typeid(*simobj).name());
++                ramulator2Ptr =
++                    dynamic_cast<gem5::memory::Ramulator2*>(simobj);
++                return;
++            }
++        }
++    }
++    panic("JDKERROR: Ramulator2 Not Found");
++}
++
++
++
+ } // namespace gem5
+diff --git a/src/sim/system.hh b/src/sim/system.hh
+index bb64f639b5..cf82b14321 100644
+--- a/src/sim/system.hh
++++ b/src/sim/system.hh
+@@ -64,6 +64,9 @@
+ #include "sim/sim_object.hh"
+ #include "sim/workload.hh"
+ 
++
++#include "mem/ramulator2.hh"
++
+ namespace gem5
+ {
+ 
+@@ -610,6 +613,28 @@ class System : public SimObject, public PCEventScope
+     // to be redirected to the faux-filesystem (a duplicate filesystem
+     // intended to replace certain files on the host filesystem).
+     std::vector<RedirectPath*> redirectPaths;
++
++  
++  private:
++    std::set<uint64_t> gcThreadSet;
++    uint executionPhase = 0;
++    gem5::memory::Ramulator2* ramulator2Ptr = nullptr;
++
++  
++  public:
++    bool inRoi = false;
++
++    bool isGCThread(uint64_t threadid);
++    void addGCThread(uint64_t threadid);
++    void removeGCThread(uint64_t threadid);
++
++    bool isGC(uint64_t threadid);
++    bool isNonGC(uint64_t threadid);
++
++    uint getExecutionPhase();
++    void setExecutionPhase(uint _execution_phase);
++
++    void findRamulator2Ptr();
+ };
+ 
+ void printSystems();
+diff --git a/util/m5/SConstruct b/util/m5/SConstruct
+index 7f07b942fc..38587b635a 100644
+--- a/util/m5/SConstruct
++++ b/util/m5/SConstruct
+@@ -52,7 +52,6 @@ AddOption('--verbose', dest='verbose', action='store_true')
+ AddOption('--no-duplicate-sources', action='store_false', default=True,
+           dest='duplicate_sources',
+           help='Do not create symlinks to sources in the build directory')
+-
+ # Universal settings.
+ if GetOption('debug_build'):
+     main.Append(CXXFLAGS=[ '-O0', '-g' ])
+@@ -123,7 +122,9 @@ conf = Configure(main, conf_dir=build_dir.Dir('.scons_config'),
+         'CheckForJavaPkg' : CheckForJavaPkg,
+         'CheckForPkgConfigPackage' : CheckForPkgConfigPackage
+ })
+-main['HAVE_JAVA'] = all(key in main for key in ('JAVAC', 'JAR'))
++
++
++main['HAVE_JAVA'] = False
+ if not main['HAVE_JAVA']:
+     print('javac and/or jar not detected, not building java wrapper.')
+ 

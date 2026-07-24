@@ -1,0 +1,41 @@
+---
+Frontend:
+    impl: GEM5
+    clock_ratio: 1
+
+MemorySystem:
+    impl: JdkDRAM
+    clock_ratio: 2
+
+    DRAM:
+        impl: DDR4
+        org:
+            preset: DDR4_16Gb_x8
+            channel: 1
+            rank: 2
+        timing:
+            preset: DDR4_3200W
+        drampower_enable: true
+        voltage:
+            preset: Default
+        current:
+            preset: Default
+
+    Controller:
+        impl: Jdk
+        Scheduler:
+            impl: FRFCFS
+        RowPolicy:
+            impl: OpenRowPolicy
+        RefreshManager:
+            impl: AllBank
+        plugins:
+            - ControllerPlugin:
+                  impl: CommandCounter
+                  commands_to_count:
+                      - ACT
+                      - PRE
+                      - RD
+                      - WR
+    AddrMapper:
+        impl: RoBaRaCoCh

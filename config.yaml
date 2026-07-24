@@ -1,0 +1,80 @@
+---
+# =========================== DACAPO DEFAULT START =========================== #
+benchmark: [avrora, batik, biojava, eclipse, fop, graphchi, h2, h2o, jme, jython, luindex, lusearch, pmd, spring, sunflow, tomcat, xalan, zxing]
+gc: [G1, Parallel, Serial, Shenandoah, Z, GenZ]
+suite: dacapo
+size: default
+# ============================ DACAPO LARGE START ============================ #
+# benchmark: [avrora, batik, biojava, eclipse, graphchi, h2, h2o, jme, jython, luindex, lusearch, pmd, spring, sunflow, tomcat, xalan]
+# gc: [G1, Parallel, Serial, Shenandoah, Z, GenZ]
+# suite: dacapo
+# size: large
+jdk:
+    counter: jdk21u-counter/build/linux-x86_64-server-release/images/jdk
+    version: 21
+    num-cpus: 24
+    use-lbo-heap: true
+    heap-multiplier: 1.0
+dacapo:
+    path: dacapo-23.11-MR2-chopin.jar
+    runs: 5
+# =========================== DACAPO DEFAULT START =========================== #
+    timeout: 3600 # unlimited execution time
+# ============================ DACAPO LARGE START ============================ #
+    # timeout: 9600 # unlimited execution time
+out:
+    path: CHANGE ME!
+counter:
+    num-cpus: 48
+    jvm-cpus: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47]
+    gc-cpus: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47]
+    numa-node: 1
+# =========================== DACAPO DEFAULT START =========================== #
+    iterations: 5
+    max-attempts: 10
+# ============================ DACAPO LARGE START ============================ #
+    # iterations: 3
+    # max-attempts: 6
+    counter: counters-group-1.yaml
+    agent: concurrent
+    cpu-governor: performance
+running-ng:
+    config:
+        dacapo: dacapo.yaml
+    prepend: systemd-run --scope --property=Slice=counter.slice numactl --all --membind=@COUNTERNUMANODE --physcpubind=@COUNTERJVMCPULIST
+    slice: 1
+    flags:
+        - --skip-oom 1
+        - --skip-timeout 1
+        - --skip-error 1
+        - --skip-log-compression
+simulator:
+    parallel_executions: 1
+    skip_systemd: true
+    maximum-heap: 3000
+hardware:
+    cpu:
+        cores: 1
+        cpu_type:
+            start: atomic
+            switch: o3
+        switch_cpu: true
+        frequency: 3.3GHz
+    cache:
+        cache_type: ruby
+        l1d:
+            size: 48KiB
+            assoc: 12
+        l1i:
+            size: 32KiB
+            assoc: 8
+        l2:
+            size: 1280KiB
+            assoc: 20
+        l3:
+            size: 18MiB
+            assoc: 12
+    ramulator2:
+        size: 3GiB
+        create_trace: true
+        config: DDR4.yaml

@@ -1,0 +1,45 @@
+---
+# Status events and columns
+PROCESS:
+    color: 92
+OK:
+    color: 92
+CORRECT_HEAP:
+    color: 92
+LOG:
+    color: 96
+    events:
+        LOG_FOUND: boolean
+        PASSED: boolean
+        CORRECT_AGENT_USED: boolean
+        VALIDATION_PASSED: boolean
+        NO_OUT_OF_MEMORY: boolean
+        SUBPROCESS_ERROR: boolean
+        NO_TIMEOUT: boolean
+        COUNTER_MULTIPLEXED: boolean
+        ASSERT_FAILED: boolean
+        EXECUTION_TIME: number
+        EXECUTION_PATH: text
+PERF:
+    color: 95
+    events:
+        PERF_FOUND: boolean
+        CORRECT_AGENT_COUNTERS: boolean
+        CORRECT_PERF_COUNTERS: boolean
+        SAME_GC_JVM_EVENTS: boolean
+JVM:
+    color: 93
+    events:
+        JVM_ERROR_DUMP_NOT_FOUND: boolean
+VERIFY:
+    color: 94
+    events:
+        VERIFY_FOUND: boolean
+        EXECUTION_VERIFIED: boolean
+        PID_CONSISTENT: boolean
+        CONSISTENT_GC_THREADS: boolean
+        CONSISTENT_JVM_THREADS: boolean
+JFR:
+    color: 96
+    events:
+        ROI_MARKER: boolean

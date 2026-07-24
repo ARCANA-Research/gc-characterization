@@ -1,0 +1,674 @@
+---
+gem5:
+# ============================= Instruction Count ============================ #
+    - base: board.processor.switch
+      event:
+          gc: core.fetchStats0.numGCInsts
+          nongc: core.fetchStats0.numNonGCInsts
+      multiplier: cores
+      name: insts
+      type: counter
+      separator: .
+    - base: ''
+      event: simSeconds
+      name: time
+      type: counter
+    - base: board.processor.switch
+      event: core.fetchStats0.numInsts
+      multiplier: cores
+      name: total_insts
+      type: counter
+      separator: .
+    - base: board.processor.switch
+      event: core.numCycles
+      multiplier: cores
+      name: total_cycles
+      type: counter
+      separator: .
+# ================================ Load to Use =============================== #
+    - base: board.processor.switch
+      event:
+          gc:
+              mean: core.lsq0.gcloadToUse::mean
+              samples: core.lsq0.gcloadToUse::samples
+          nongc:
+              mean: core.lsq0.nonGcloadToUse::mean
+              samples: core.lsq0.nonGcloadToUse::samples
+      multiplier: cores
+      name: loadtouse
+      type: distribution
+      separator: .
+    - base: board.processor.switch
+      event:
+          mean: core.lsq0.loadToUse::mean
+          samples: core.lsq0.loadToUse::samples
+      multiplier: cores
+      name: total_loadtouse
+      type: distribution
+      separator: .
+# ============================= L1 Cache Hit/Miss ============================ #
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event:
+          gc: Dcache.m_gc_load_demand_hits
+          nongc: Dcache.m_non_gc_load_demand_hits
+      multiplier: cores
+      name: l1_load_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event:
+          gc: Dcache.m_gc_store_demand_hits
+          nongc: Dcache.m_non_gc_store_demand_hits
+      multiplier: cores
+      name: l1_store_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_demand_hits
+      multiplier: cores
+      name: l1_total_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event:
+          gc: Dcache.m_gc_load_demand_misses
+          nongc: Dcache.m_non_gc_load_demand_misses
+      multiplier: cores
+      name: l1_load_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event:
+          gc: Dcache.m_gc_store_demand_misses
+          nongc: Dcache.m_non_gc_store_demand_misses
+      multiplier: cores
+      name: l1_store_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_demand_misses
+      multiplier: cores
+      name: l1_total_demand_misses
+      type: counter
+      separator: .
+# ============================= L1 Cache Line Use ============================ #
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event:
+          gc: Dcache.m_demand_gc_lines_allocated
+          nongc: Dcache.m_demand_non_gc_lines_allocated
+      multiplier: cores
+      name: l1_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_demand_lines_allocated
+      multiplier: cores
+      name: l1_total_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_lines_allocated_by_gc_accessed_by_gc
+      multiplier: cores
+      name: l1_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_lines_allocated_by_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l1_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_lines_allocated_by_non_gc_accessed_by_gc
+      multiplier: cores
+      name: l1_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_lines_allocated_by_non_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l1_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_num_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l1_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_num_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l1_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_num_non_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l1_non_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l1_controllers
+      event: Dcache.m_num_non_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l1_non_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+# ============================= L2 Cache Hit/Miss ============================ #
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event:
+          gc: cache.m_gc_load_demand_hits
+          nongc: cache.m_non_gc_load_demand_hits
+      multiplier: cores
+      name: l2_load_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event:
+          gc: cache.m_gc_store_demand_hits
+          nongc: cache.m_non_gc_store_demand_hits
+      multiplier: cores
+      name: l2_store_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_demand_hits
+      multiplier: cores
+      name: l2_total_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event:
+          gc: cache.m_gc_load_demand_misses
+          nongc: cache.m_non_gc_load_demand_misses
+      multiplier: cores
+      name: l2_load_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event:
+          gc: cache.m_gc_store_demand_misses
+          nongc: cache.m_non_gc_store_demand_misses
+      multiplier: cores
+      name: l2_store_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_demand_misses
+      multiplier: cores
+      name: l2_total_demand_misses
+      type: counter
+      separator: .
+# ============================= L2 Cache Line Use ============================ #
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event:
+          gc: cache.m_demand_gc_lines_allocated
+          nongc: cache.m_demand_non_gc_lines_allocated
+      multiplier: cores
+      name: l2_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_demand_lines_allocated
+      multiplier: cores
+      name: l2_total_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_lines_allocated_by_gc_accessed_by_gc
+      multiplier: cores
+      name: l2_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_lines_allocated_by_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l2_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_lines_allocated_by_non_gc_accessed_by_gc
+      multiplier: cores
+      name: l2_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_lines_allocated_by_non_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l2_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_num_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l2_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_num_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l2_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_num_non_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l2_non_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l2_controllers
+      event: cache.m_num_non_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l2_non_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+# ============================= L3 Cache Hit/Miss ============================ #
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event:
+          gc: L2cache.m_gc_load_demand_hits
+          nongc: L2cache.m_non_gc_load_demand_hits
+      multiplier: cores
+      name: l3_load_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event:
+          gc: L2cache.m_gc_store_demand_hits
+          nongc: L2cache.m_non_gc_store_demand_hits
+      multiplier: cores
+      name: l3_store_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_demand_hits
+      multiplier: cores
+      name: l3_total_demand_hits
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event:
+          gc: L2cache.m_gc_load_demand_misses
+          nongc: L2cache.m_non_gc_load_demand_misses
+      multiplier: cores
+      name: l3_load_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event:
+          gc: L2cache.m_gc_store_demand_misses
+          nongc: L2cache.m_non_gc_store_demand_misses
+      multiplier: cores
+      name: l3_store_demand_misses
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_demand_misses
+      multiplier: cores
+      name: l3_total_demand_misses
+      type: counter
+      separator: .
+# ============================= L3 Cache Line Use ============================ #
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event:
+          gc: L2cache.m_demand_gc_lines_allocated
+          nongc: L2cache.m_demand_non_gc_lines_allocated
+      multiplier: cores
+      name: l3_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_demand_lines_allocated
+      multiplier: cores
+      name: l3_total_demand_lines_allocated
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_lines_allocated_by_gc_accessed_by_gc
+      multiplier: cores
+      name: l3_lines_allocated_by_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_lines_allocated_by_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l3_lines_allocated_by_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_lines_allocated_by_non_gc_accessed_by_gc
+      multiplier: cores
+      name: l3_lines_allocated_by_non_gc_accessed_by_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_lines_allocated_by_non_gc_accessed_by_non_gc
+      multiplier: cores
+      name: l3_lines_allocated_by_non_gc_accessed_by_non_gc_at_least_once
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_num_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l3_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_num_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l3_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_num_non_gc_lines_accessed_by_gc
+      multiplier: cores
+      name: l3_non_gc_lines_accessed_by_gc
+      type: counter
+      separator: .
+    - base: board.cache_hierarchy.ruby_system.l3_controllers
+      event: L2cache.m_num_non_gc_lines_accessed_by_non_gc
+      multiplier: cores
+      name: l3_non_gc_lines_accessed_by_non_gc
+      type: counter
+      separator: .
+ramulator2:
+# ================================ Idle Cycles =============================== #
+    - event: active_cycles_rank
+      name: dram_active_cycles
+      multiplier: ranks
+      type: counter
+      append: ':'
+    - event: idle_cycles_rank
+      name: dram_idle_cycles
+      multiplier: ranks
+      type: counter
+      append: ':'
+    - event: num_cycles_skipped_retry_not_empty
+      name: dram_cycles_skipped_due_to_retry
+      type: counter
+      append: ':'
+    - event: memory_system_cycles
+      name: dram_cycles
+      type: counter
+      append: ':'
+# =============================== Request Count ============================== #
+    - event:
+          gc: total_num_gc_write_requests
+          nongc: total_num_non_gc_write_requests
+      name: dram_write_requests
+      type: counter
+      append: ':'
+    - event: total_num_write_requests
+      name: dram_total_write_requests
+      type: counter
+      append: ':'
+    - event:
+          gc: total_num_gc_read_requests
+          nongc: total_num_non_gc_read_requests
+      name: dram_read_requests
+      type: counter
+      append: ':'
+    - event: total_num_read_requests
+      name: dram_total_write_requests
+      type: counter
+      append: ':'
+    - event:
+          gc: num_gc_read_reqs_
+          nongc: num_non_gc_read_reqs_
+      multiplier: ranks
+      name: dram_controller_read_requests
+      type: counter
+      append: ':'
+    - event: num_parsed_lines
+      name: trace_parsed_lines
+      type: counter
+      append: ':'
+    - event: num_total_lines
+      name: trace_total_lines
+      type: counter
+      append: ':'
+    - event:
+          gc: num_gc_forwarded_reqs_
+          nongc: num_non_gc_forwarded_reqs_
+      multiplier: ranks
+      name: dram_forwarded_requests
+      type: counter
+      append: ':'
+# ============================== Request Rejects ============================= #
+    - event:
+          gc: num_gc_write_buffer_full_reqs_
+          nongc: num_non_gc_write_buffer_full_reqs_
+      multiplier: ranks
+      name: dram_write_buffer_full
+      type: counter
+      append: ':'
+    - event:
+          gc: num_gc_read_buffer_full_reqs_
+          nongc: num_non_gc_read_buffer_full_reqs_
+      multiplier: ranks
+      name: dram_read_buffer_full
+      type: counter
+      append: ':'
+# =============================== Buffer Usage =============================== #
+    - event:
+          gc: num_scheduled_gc_active_
+          nongc: num_scheduled_non_gc_active_
+      multiplier: ranks
+      name: dram_scheduled_active
+      type: counter
+      append: ':'
+    - event:
+          gc: num_scheduled_gc_rdwr_
+          nongc: num_scheduled_non_gc_rdwr_
+      multiplier: ranks
+      name: dram_scheduled_rdwr
+      type: counter
+      append: ':'
+# =============================== Total Energy =============================== #
+    - event: total_energy
+      name: dram_total_energy
+      type: counter
+      append: ':'
+    - event: total_background_energy
+      name: dram_background_energy
+      type: counter
+      append: ':'
+# ============================== Command Energy ============================== #
+    - event:
+          gc: total_gc_cmd_energy
+          nongc: total_non_gc_cmd_energy
+      name: dram_cmd_energy
+      type: counter
+      append: ':'
+    - event: total_cmd_energy
+      name: dram_total_cmd_energy
+      type: counter
+      append: ':'
+# ================================= Row Miss ================================= #
+    - event:
+          gc: gc_read_row_misses_
+          nongc: non_gc_read_row_misses_
+      multiplier: ranks
+      name: dram_read_row_misses
+      type: counter
+      append: ':'
+    - event: read_row_misses_
+      multiplier: ranks
+      name: dram_total_read_row_misses
+      type: counter
+      append: ':'
+    - event:
+          gc: gc_read_row_hits_
+          nongc: non_gc_read_row_hits_
+      multiplier: ranks
+      name: dram_read_row_hits
+      type: counter
+      append: ':'
+    - event: read_row_hits_
+      multiplier: ranks
+      name: dram_total_read_row_hits
+      type: counter
+      append: ':'
+    - event:
+          gc: gc_read_row_conflicts_
+          nongc: non_gc_read_row_conflicts_
+      multiplier: ranks
+      name: dram_read_row_conflicts
+      type: counter
+      append: ':'
+    - event: read_row_conflicts_
+      multiplier: ranks
+      name: dram_total_read_row_conflicts
+      type: counter
+      append: ':'
+    - event: num_close_reqs
+      name: dram_total_num_close_reqs
+      type: counter
+      append: ':'
+# =============================== Command Counter ============================= #
+    - event:
+          gc: GC->WR
+          nongc: NonGC->WR
+      name: dram_num_wr_commands
+      type: counter
+      append: ','
+    - event: WR
+      name: dram_num_total_wr_commands
+      type: counter
+      append: ','
+    - event:
+          gc: GC->RD
+          nongc: NonGC->RD
+      name: dram_num_rd_commands
+      type: counter
+      append: ','
+    - event: RD
+      name: dram_num_total_rd_commands
+      type: counter
+      append: ','
+    - event:
+          gc: GC->ACT
+          nongc: NonGC->ACT
+      name: dram_num_act_commands
+      type: counter
+      append: ','
+    - event: ACT
+      name: dram_num_total_act_commands
+      type: counter
+      append: ','
+    - event:
+          gc: GC->PRE
+          nongc: NonGC->PRE
+      name: dram_num_pre_commands
+      type: counter
+      append: ','
+    - event: PRE
+      name: dram_num_total_pre_commands
+      type: counter
+      append: ','
+# ============================== Request Latency ============================= #
+    - event:
+          gc:
+              total: total_gc_read_latency_
+              samples: num_gc_read_latency_samples_
+          nongc:
+              total: total_non_gc_read_latency_
+              samples: num_non_gc_read_latency_samples_
+      multiplier: ranks
+      name: dram_read_latency
+      type: distribution
+      append: ':'
+    - event:
+          total: read_latency_
+          samples: num_read_latency_samples_
+      multiplier: ranks
+      name: dram_total_read_latency
+      type: distribution
+      append: ':'
+    - event:
+          gc:
+              total: gc_scheduled_to_depart_read_latency_
+              samples: num_gc_read_latency_samples_
+          nongc:
+              total: non_gc_scheduled_to_depart_read_latency_
+              samples: num_non_gc_read_latency_samples_
+      multiplier: ranks
+      name: dram_arrive_to_scheduled_latency
+      type: distribution
+      append: ':'
+    - event:
+          gc:
+              total: gc_arrive_to_scheduled_read_latency_
+              samples: num_gc_read_latency_samples_
+          nongc:
+              total: non_gc_arrive_to_scheduled_read_latency_
+              samples: num_non_gc_read_latency_samples_
+      multiplier: ranks
+      name: dram_scheduled_to_depart_latency
+      type: distribution
+      append: ':'
+# ================================ GC Blocking =============================== #
+    - event: num_scheduled_gc_blocking_non_gc_active_
+      multiplier: ranks
+      name: dram_gc_blocking_non_gc_active
+      type: counter
+      append: ':'
+    - event: num_scheduled_gc_blocking_non_gc_rdwr_
+      multiplier: ranks
+      name: dram_gc_blocking_non_gc_rdwr
+      type: counter
+      append: ':'
+    - event:
+          gc: num_scheduled_gc_rdwr_
+          nongc: num_scheduled_non_gc_rdwr_
+      multiplier: ranks
+      name: dram_scheduled_rdwr
+      type: counter
+      append: ':'
+    - event:
+          gc: num_scheduled_gc_active_
+          nongc: num_scheduled_non_gc_active_
+      multiplier: ranks
+      name: dram_scheduled_active
+      type: counter
+      append: ':'
+    - event: num_scheduled_gc_rdwr_
+      multiplier: ranks
+      name: dram_gc_scheduled_rdwr
+      type: counter
+      append: ':'
+    - event: num_scheduled_gc_active_
+      multiplier: ranks
+      name: dram_gc_scheduled_active
+      type: counter
+      append: ':'
+# ================================= GC Queue ================================= #
+    - event:
+          gc:
+              total: gc_queue_len_total_0
+              samples: memory_system_cycles
+          nongc:
+              total: non_gc_queue_len_total_0
+              samples: memory_system_cycles
+      name: dram_queue_len
+      type: distribution
+      append: ':'
+    - event:
+          gc:
+              total: gc_read_queue_len_0
+              samples: memory_system_cycles
+          nongc:
+              total: non_gc_read_queue_len_0
+              samples: memory_system_cycles
+      name: dram_read_queue_len
+      type: distribution
+      append: ':'
+    - event:
+          gc:
+              total: gc_write_queue_len_0
+              samples: memory_system_cycles
+          nongc:
+              total: non_gc_write_queue_len_0
+              samples: memory_system_cycles
+      name: dram_write_queue_len
+      type: distribution
+      append: ':'

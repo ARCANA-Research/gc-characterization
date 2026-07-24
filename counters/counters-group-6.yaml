@@ -1,0 +1,5 @@
+---
+PERF:
+    counters:
+        - ICACHE_64B:IFTAG_MISS
+        - ICACHE_64B:IFTAG_HIT

@@ -1,0 +1,22 @@
+# compiled class file
+*.class
+
+# build folder
+build/
+
+# DS Store
+.DS_Store
+
+# temporary Files and Directories
+tmp/
+ext/
+deps/
+~$*
+
+# venv
+.venv/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
