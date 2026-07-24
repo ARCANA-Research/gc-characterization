@@ -179,6 +179,14 @@ echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 
 Platform specific counters can be found by running the `showevtinfo` example in the `libpfm4` library (compiled automatically in the `ext` directory). 
 
+### Change DVFS Setting
+
+We set CPU to `performance` setting to create a consistent execution environment. Use the following scripts, after setting the correct number of CPUs in it, to change DVFS behavior:
+
+```
+./support/counter/set_freq_scaling.sh 
+```
+
 ### Disable SMT
 
 It *might* help to disable SMT to compare counters with gem5 simulation (as the simulator does not implement SMT):
@@ -211,3 +219,9 @@ We execute "default" and "large" workload size on performance counters and "defa
 The final output format is in terms of .xlsx files (Microsoft Excel sheets) saved to the path specified on script execution, under the "excel" folder. However, it is possible that some benchmarks fail to execute correctly. `check.yaml`--and `check.ansi`--show which benchmarks passed and failed verification check, and why. If no benchmarks execute correctly, no Microsoft Excel output is generated. 
 
 All claims of the paper can be reproduced by executing all counters specified in `counters/` directory and executing simulation runs. 
+
+## Initial Setup (Kick-the-Tires)
+
+After installing dependencies and building the tool, change `config.yaml` to execute one benchmark and one GC. We recommend using `fop` and `G1` respectively as this workload has a low execution time. We recommend changing `heap-multiplier` to `5.0` to execute workloads at 5-times of the minimum heap, reducing the execution time even further. 
+
+Check `_verify.yaml` in output directory for *each* benchmark and `check.yaml` in root output directory to find why a benchmark execution failed, if it does. 
