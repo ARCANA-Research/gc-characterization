@@ -50,7 +50,7 @@ running-ng:
         - --skip-log-compression
 simulator:
     parallel_executions: 1
-    skip_systemd: true
+    skip_systemd: false
     maximum-heap: 3000
 hardware:
     cpu:
