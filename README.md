@@ -190,7 +190,7 @@ SMT can be re-enabled with the following command:
 echo on | sudo tee /sys/devices/system/cpu/smt/control
 ```
 
-## Reproducibe Experiments
+## Reproduce Experiments
 
 The first step for reproducing the results of our work is to estimate the minimum heap for all GC implementations using [`minheap`](https://anupli.github.io/running-ng/commands/minheap.html) command in `running-ng`. We follow the DaCapo Benchmark Suite's methodology, specified on their code repository -> https://github.com/dacapobench/dacapobench/tree/main/tools/analysis/minheap.
 
@@ -203,6 +203,11 @@ We execute "default" and "large" workload size on performance counters and "defa
 
 `run-simulator.sh` executes workloads in gem5. We execute workloads just once in the simulator.
 
+> [!Tip]
+> We recommend executing the counter and simulation scripts for a single benchmark and a single GC to sanity check system state.
+
 ### Output Format
 
 The final output format is in terms of .xlsx files (Microsoft Excel sheets) saved to the path specified on script execution, under the "excel" folder. However, it is possible that some benchmarks fail to execute correctly. `check.yaml`--and `check.ansi`--show which benchmarks passed and failed verification check, and why. If no benchmarks execute correctly, no Microsoft Excel output is generated. 
+
+All claims of the paper can be reproduced by executing all counters specified in `counters/` directory and executing simulation runs. 
