@@ -4,11 +4,13 @@ benchmark: [avrora, batik, biojava, eclipse, fop, graphchi, h2, h2o, jme, jython
 gc: [G1, Parallel, Serial, Shenandoah, Z, GenZ]
 suite: dacapo
 size: default
+# ============================ DACAPO DEFAULT END ============================ #
 # ============================ DACAPO LARGE START ============================ #
 # benchmark: [avrora, batik, biojava, eclipse, graphchi, h2, h2o, jme, jython, luindex, lusearch, pmd, spring, sunflow, tomcat, xalan]
 # gc: [G1, Parallel, Serial, Shenandoah, Z, GenZ]
 # suite: dacapo
 # size: large
+# ============================= DACAPO LARGE END ============================= #
 jdk:
     counter: jdk21u-counter/build/linux-x86_64-server-release/images/jdk
     version: 21
@@ -20,8 +22,10 @@ dacapo:
     runs: 5
 # =========================== DACAPO DEFAULT START =========================== #
     timeout: 3600 # unlimited execution time
+# ============================ DACAPO DEFAULT END ============================ #
 # ============================ DACAPO LARGE START ============================ #
     # timeout: 9600 # unlimited execution time
+# ============================= DACAPO LARGE END ============================= #
 out:
     path: CHANGE ME!
 counter:
@@ -32,9 +36,11 @@ counter:
 # =========================== DACAPO DEFAULT START =========================== #
     iterations: 5
     max-attempts: 10
+# ============================ DACAPO DEFAULT END ============================ #
 # ============================ DACAPO LARGE START ============================ #
     # iterations: 3
     # max-attempts: 6
+# ============================= DACAPO LARGE END ============================= #
     counter: counters-group-1.yaml
     agent: concurrent
     cpu-governor: performance

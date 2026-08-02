@@ -107,7 +107,7 @@ if [ ! -d "$GEM5_DIR" ]; then
   git clone --revision=c9625ce9cc5b5a90a38327de5ac0e1870974af5e https://github.com/gem5/gem5.git $GEM5_DIR
   git -C $GEM5_DIR apply $PATCHES_DIR/gem5.patch
   git clone https://github.com/CMU-SAFARI/ramulator2 $RAMULATOR2_DIR
-  git -C $RAMULATOR2_DIR checkout 4a29cac924e4dabc8f84c648b653ec4d3ec53f3f
+  git -C $RAMULATOR2_DIR checkout 14a52cee472efc155a1086ef3c1080765f8fad12
   git -C $RAMULATOR2_DIR apply --ignore-space-change --ignore-whitespace $PATCHES_DIR/ramulator2.patch
   mkdir $RAMULATOR2_DIR/build
   cd $RAMULATOR2_DIR/build
