@@ -50,3 +50,8 @@ add_executable(Perf_verify verify.cpp components/base.cpp components/verify_thre
 target_include_directories(Perf_verify PRIVATE "${JDKCOUNTERPATH}/include" "${JDKCOUNTERPATH}/include/linux" "${CMAKE_CURRENT_SOURCE_DIR}/include" ${yaml-cpp_SOURCE_DIR}/include)
 target_link_libraries(Perf_verify libpfm4 yaml-cpp spdlog)
 set_target_properties(Perf_verify PROPERTIES OUTPUT_NAME verify)
+
+add_library(Perf_per_phase_agent SHARED per_phase_agent.cpp components/agent_counter.cpp components/agent_state.cpp components/base.cpp components/counter_data.cpp components/per_phase_counter_data.cpp)
+target_include_directories(Perf_per_phase_agent PRIVATE "${JDKCOUNTERPATH}/include" "${JDKCOUNTERPATH}/include/linux" "${CMAKE_CURRENT_SOURCE_DIR}/include" "${libpfm4_include_dir}" ${yaml-cpp_SOURCE_DIR}/include)
+target_link_libraries(Perf_per_phase_agent libpfm4 yaml-cpp spdlog)
+set_target_properties(Perf_per_phase_agent PROPERTIES OUTPUT_NAME per_phase_agent)

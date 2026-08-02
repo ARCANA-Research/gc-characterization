@@ -207,7 +207,7 @@ The first step for reproducing the results of our work is to estimate the minimu
 
 We execute "default" and "large" workload size on performance counters and "default" in simulation in our paper.
 
-`run-counter.sh` measures GC overhead using performance counters. `config.yaml` defines which counters are read using a counters file. We verify how workloads executing using `verify` binary that checks if JDK threads executed on the correct CPUs. 
+`run-counter.sh` measures GC overhead using performance counters. [Line 44 of `config.yaml`](./config.yaml#L44) defines which counters are read using a counters file stored in `counters` directory. We verify how workloads executing using `verify` binary that checks if JDK threads executed on the correct CPUs. 
 
 `run-simulator.sh` executes workloads in gem5. We execute workloads just once in the simulator.
 
@@ -225,3 +225,66 @@ All claims of the paper can be reproduced by executing all counters specified in
 After installing dependencies and building the tool, change `config.yaml` to execute one benchmark and one GC. We recommend using `fop` and `G1` respectively as this workload has a low execution time. We recommend changing `heap-multiplier` to `5.0` to execute workloads at 5-times of the minimum heap, reducing the execution time even further. 
 
 Check `_verify.yaml` in output directory for *each* benchmark and `check.yaml` in root output directory to find why a benchmark execution failed, if it does. 
+
+### Generating Paper Figures
+
+Figures for "default" workload size require using configuration defined under `DACAPO DEFAULT` in `config.yaml`. Large workload configuration is defined under `DACAPO LARGE` header. Please only uncomment configuration for one of the sizes to prevent unexpected YAML parsing.
+
+> [!Note]
+> Please execute all workloads for all GC implementations pre-defined in `config.yaml` to generate data for a plot.
+
+### Figures using Simulation
+
+A single execution of a workload at its "default" size generated data for all simulation results. This includes figures 11, 12, 19, 20, 22, 23, 31, 35, 45 and 46.
+
+### Figures using Performance Counters
+
+The counters analyzed during a workload execution are defined in `counters` directory, with the counter YAML used for a run specified on [line 44 of `config.yaml`](./config.yaml#L44). One set of counters *can* generate multiple figures. 
+
+Please execute all counters at both "default" and "large" workload sizes, and at heap multipliers of 1.0, 1.25, 1.5, 2.0, 3.0, 4.0 and 5.0 ([line 19 of `config.yaml`](./config.yaml#L19)).
+
+All figures use the `concurrent` JVM TI agent defined on [line 45 of `config.yaml`](./config.yaml#L45) unless specified otherwise.
+
+| Figure | Counter File | Agent | Workload Size |
+| - | - | - | - |
+| 4 | `counters-agent.yaml` | `concurrent` | `default` |
+| 5 | `counters-agent.yaml` | `concurrent` | `large` |
+| 6 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 7 | `counters-group-1.yaml` | `concurrent` | `large` |
+| 8 | `counters-group-1.yaml`, `counters-group-2.yaml` and `counters-group-3.yaml` | `concurrent` | `default` |
+| 9 | `counters-group-1.yaml`, `counters-group-2.yaml` and `counters-group-3.yaml` | `concurrent` | `default` |
+| 10 | `counters-group-4.yaml` | `concurrent` | `default` |
+| 13 | `counters-group-4.yaml` | `concurrent` | `default` |
+| 14 | `counters-group-4.yaml` | `concurrent` | `default` |
+| 15 | `counters-group-4.yaml` | `concurrent` | `default`  and `large` |
+| 16 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 17 | `counters-group-1.yaml` | `concurrent` | `large` |
+| 18 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 21 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 24 | `counters-group-5.yaml` | `concurrent` | `default` |
+| 31 | `counters-agent.yaml` | `concurrent` | `default`  and `large` |
+| 32 | `counters-group-1.yaml`, `counters-group-2.yaml` and `counters-group-3.yaml` | `concurrent` | `default` |
+| 33 | `counters-group-4.yaml` | `concurrent` | `default` |
+| 34 | `counters-group-4.yaml` | `concurrent` | `default` |
+| 36 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 37 | `counters-group-1.yaml` | `concurrent` | `large` |
+| 38 | `counters-group-1.yaml` | `concurrent` | `default` |
+| 39 | `counters-group-1.yaml` | `concurrent` | `large` |
+| 40 | `counters-group-3.yaml` | `concurrent` | `default` |
+| 41 | `counters-group-3.yaml` | `concurrent` | `large` |
+| 42 | `counters-group-1.yaml` and `counters-group-3.yaml` | `concurrent` | `default` and `large` |
+| 43 | `counters-group-1.yaml` | `concurrent` | `default` and `large` |
+
+
+Figure 21 and 44 estimates the total energy consumption of a workload execution by multiplying the number of L1, L2 and L3 cache loads with the estimated energy per load specified in Table 6. It then divides this estimate by the total number of L1 cache loads.
+
+Figure 25, 47 and 48 measures counters in  `counters-group-1.yaml` and `counters-group-5.yaml` for `no_prefetcher_concurrent`, `no_prefetcher_stw` and `no_prefetcher` JVM TI agents specified on [line 45 of `config.yaml`](./config.yaml#L45). These figures are measured at `default` workload size.
+
+Figures 26, 27 and 28 measures counters in `counters-agent.yaml` with `per_phase_agent` JVM TI agent specified on [line 45 of `config.yaml`](./config.yaml#L45).
+
+Figures 29 and 30 measures counters in `counters-agent.yaml` with `concurrent` JVM TI agent specified on [line 45 of `config.c`](./config.yaml#L45) along with enabling Java Flight Recorder by uncommenting `|start_jfr` on [line 11 of `dacapo.yaml`](./running/counter/dacapo.yaml#L11).
+
+
+### Other Figures and Tables
+
+Table 2: It uses minimum heap data specified in `support/min-heap`.
