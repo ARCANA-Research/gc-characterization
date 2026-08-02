@@ -98,7 +98,7 @@ This is an optional step that we perform to simplify simulation config. We chang
 `config.yaml` specifies what workloads are executed and the system state for their execution. 
 
 > [!Caution]
-> Please specify an output directory in `config.yaml` before executing workloads. Execution will fail without a valid path.
+> Please specify an output directory in `config.yaml` before executing workloads. Execution will fail without a valid path. The placeholder text for output directory is ["CHANGE ME!"](./config.yaml#L26).
 
 ### GC Thread Isolation
 
